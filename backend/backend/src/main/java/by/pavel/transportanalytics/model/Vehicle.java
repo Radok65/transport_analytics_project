@@ -24,7 +24,7 @@ public class Vehicle {
     @Column(nullable = false)
     private String model;
 
-    @Column(nullable = false)
+    @Column(name = "manufacture_year", nullable = false)
     private Integer year;
 
     @Column(name = "fuel_norm", nullable = false, precision = 5, scale = 2)
