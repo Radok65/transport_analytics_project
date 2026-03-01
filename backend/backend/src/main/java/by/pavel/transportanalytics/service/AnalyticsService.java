@@ -32,7 +32,6 @@ public class AnalyticsService {
         List<Trip> allTrips = tripRepository.findAll();
         List<Repair> allRepairs = repairRepository.findAll();
 
-        // 1. Топ-5 по пробегу
         Map<String, Integer> top5 = vehicles.stream()
                 .collect(Collectors.toMap(
                         Vehicle::getPlateNumber,
@@ -45,7 +44,6 @@ public class AnalyticsService {
                 .limit(5)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
-        // 2. Общие затраты
         BigDecimal totalFuel = allTrips.stream()
                 .map(Trip::getFuelUsed)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
@@ -55,7 +53,6 @@ public class AnalyticsService {
                 .map(Repair::getCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 3. НОВОЕ: Матрица эффективности
         List<AnalyticsDto.VehiclePerformancePoint> performanceMatrix = vehicles.stream()
                 .map(this::calculatePerformancePoint)
                 .filter(Objects::nonNull)
@@ -71,13 +68,12 @@ public class AnalyticsService {
 
     @Transactional(readOnly = true)
     public AnalyticsDto getVehicleAnalytics(Long vehicleId) {
-        // Берем глобальные данные, чтобы графики не исчезали
+
         AnalyticsDto dto = getGlobalAnalytics();
 
         Vehicle vehicle = vehicleRepository.findById(vehicleId).orElse(null);
         if (vehicle == null) return dto;
 
-        // 4. Динамика расхода (Тренд)
         List<AnalyticsDto.TripEfficiencyPoint> trend = vehicle.getTrips().stream()
                 .sorted(Comparator.comparing(Trip::getDate))
                 .map(t -> {
@@ -96,7 +92,6 @@ public class AnalyticsService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        // 5. Личные затраты авто
         BigDecimal vehFuel = vehicle.getTrips().stream()
                 .map(Trip::getFuelUsed)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
