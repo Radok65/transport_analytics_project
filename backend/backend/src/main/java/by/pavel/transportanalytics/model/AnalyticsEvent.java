@@ -14,7 +14,11 @@ public class AnalyticsEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vehicle_id")
+    private Vehicle vehicle;
+    @Column(name = "event_type")
+    private String eventType;
     private String category;
     private String eventName;
     private String parameter;

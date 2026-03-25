@@ -39,7 +39,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         // Разрешаем анонимный доступ к регистрации, входу и проверке состояния
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/health").permitAll()
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/health", "/api/telemetry/**").permitAll()
                         // Все остальные запросы требуют аутентификации
                         .anyRequest().authenticated()
                 )

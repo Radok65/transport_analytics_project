@@ -30,6 +30,15 @@ public class Vehicle {
     @Column(name = "fuel_norm", nullable = false, precision = 5, scale = 2)
     private BigDecimal fuelNorm;
 
+    @Column(name = "current_fuel_level")
+    private Double currentFuelLevel;
+
+    @Column(name = "last_latitude")
+    private Double lastLatitude;
+
+    @Column(name = "last_longitude")
+    private Double lastLongitude;
+
     // Связь: Один автомобиль -> Много ремонтов
     @OneToMany(
             mappedBy = "vehicle",
