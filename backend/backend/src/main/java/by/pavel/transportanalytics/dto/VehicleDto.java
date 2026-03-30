@@ -13,4 +13,7 @@ public class VehicleDto {
     private BigDecimal fuelNorm;
     private List<RepairDto> repairs;
     private List<TripDto> trips;
+    private Double currentFuelLevel;
+    private Double lastLatitude;
+    private Double lastLongitude;
 }

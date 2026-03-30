@@ -61,3 +61,14 @@ export const deleteRepair = (vehicleId: number, repairId: number) => apiClient.d
 export const getTripsForVehicle = (vehicleId: number) => apiClient.get<Trip[]>(`/vehicles/${vehicleId}/trips`);
 export const createTrip = (tripData: Omit<Trip, 'id'>) => apiClient.post<Trip>(`/vehicles/${tripData.vehicleId}/trips`, tripData);
 export const deleteTrip = (vehicleId: number, tripId: number) => apiClient.delete(`/vehicles/${vehicleId}/trips/${tripId}`);
+
+export const getTelematicsAlerts = () => 
+    apiClient.get('/telematics/alerts');
+
+// Получить историю движения конкретного ТС
+export const getVehicleTelematicsHistory = (vehicleId: number) => 
+    apiClient.get(`/telematics/vehicle/${vehicleId}/history`);
+
+// Отправить данные телематики (для симулятора на фронте)
+export const sendTelematicsData = (data: any) => 
+    apiClient.post('/telematics/data', data);

@@ -6,6 +6,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "trips")
@@ -29,6 +30,19 @@ public class Trip {
     @Column(name = "fuel_used", nullable = false, precision = 7, scale = 2)
     private BigDecimal fuelUsed;
 
+    // Добавь статус поездки
+    @Column(nullable = false)
+    private String status = "PLANNED"; // PLANNED (запланирована), IN_PROGRESS (в пути), COMPLETED (завершена)
+
+    @Column(name = "start_time")
+    private LocalDateTime startTime;
+
+    @Column(name = "end_time")
+    private LocalDateTime endTime;
+
+    // Затраты на топливо в деньгах (будем считать через Fuel API)
+    @Column(name = "fuel_cost", precision = 10, scale = 2)
+    private BigDecimal fuelCost;
     // Связь: Много поездок -> Один автомобиль
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id", nullable = false)

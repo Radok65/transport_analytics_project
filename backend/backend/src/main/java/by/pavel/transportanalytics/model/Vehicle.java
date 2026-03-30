@@ -39,6 +39,17 @@ public class Vehicle {
     @Column(name = "last_longitude")
     private Double lastLongitude;
 
+    // Добавь это поле к существующим
+    @Column(name = "tank_capacity")
+    private Double tankCapacity; // Объем бака в литрах (например, 500.0)
+
+    // Добавь новые связи в конец класса
+    @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TelematicsData> telematicsData = new ArrayList<>();
+
+    @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TelematicsAlert> alerts = new ArrayList<>();
+
     // Связь: Один автомобиль -> Много ремонтов
     @OneToMany(
             mappedBy = "vehicle",

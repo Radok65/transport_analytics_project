@@ -56,3 +56,28 @@ export interface AnalyticsData {
   vehicleFuelCost?: number;
   vehicleRepairCost?: number;
 }
+
+export interface TelematicsAlertDto {
+  id: number;
+  vehicleId: number;
+  plateNumber: string;
+  timestamp: string;
+  type: string; // "FUEL_DROP" или "SPEEDING"
+  latitude: number;
+  longitude: number;
+  description: string;
+  financialLoss: number;
+}
+
+export interface TelematicsDataDto {
+  vehicleId: number;
+  plateNumber?: string;
+  tripId?: number;
+  timestamp?: string;
+  latitude: number;
+  longitude: number;
+  speed: number;
+  fuelLevel: number;
+  weatherCondition?: string;
+  temperature?: number;
+}

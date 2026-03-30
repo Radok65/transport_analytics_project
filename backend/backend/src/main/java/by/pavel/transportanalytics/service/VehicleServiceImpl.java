@@ -88,6 +88,9 @@ public class VehicleServiceImpl implements VehicleService {
         dto.setModel(vehicle.getModel());
         dto.setYear(vehicle.getYear());
         dto.setFuelNorm(vehicle.getFuelNorm());
+        dto.setCurrentFuelLevel(vehicle.getCurrentFuelLevel());
+        dto.setLastLatitude(vehicle.getLastLatitude());
+        dto.setLastLongitude(vehicle.getLastLongitude());
 
         List<RepairDto> repairDtos = vehicle.getRepairs().stream().map(repair -> {
             RepairDto repairDto = new RepairDto();
