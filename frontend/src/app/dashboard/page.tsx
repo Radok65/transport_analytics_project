@@ -80,23 +80,24 @@ import {
     AlertTriangle,
     FastForward,
     Navigation,
+    Cloud,
+    Sun,
+    CloudRain,
+    Snowflake,
 } from 'lucide-react';
 
 // ==========================================
-// БИБЛИОТЕКИ
+// БИБЛИОТЕКИ И PDF
 // ==========================================
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import { DashboardCharts } from '@/components/DashboardCharts';
 import VehicleMap from '@/components/VehicleMap';
 import { TelematicsAlertDto } from '@/types';
 
-// ==========================================
-// НАСТРОЙКИ PDFMAKE
-// ==========================================
 pdfMake.vfs = pdfFonts.vfs;
 pdfMake.fonts = {
     Roboto: {
@@ -107,7 +108,6 @@ pdfMake.fonts = {
     },
 };
 
-// Анимированная строка таблицы
 const MotionTableRow = motion(TableRow);
 
 const FUEL_PRICE_PER_LITER = 2.57;
@@ -201,7 +201,7 @@ export interface AnalyticsData {
 }
 
 // ==========================================
-// КОМПОНЕНТЫ И УТИЛИТЫ
+// УТИЛИТЫ
 // ==========================================
 const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }) => {
     if (order === 'asc') return <ArrowUp className="inline ml-2 h-4 w-4" />;
@@ -263,6 +263,12 @@ export default function DashboardPage() {
         Record<number, { mileageAdded: number; fuelUsedAdded: number }>
     >({});
 
+    const [weatherData, setWeatherData] = useState<{
+        temp: number;
+        description: string;
+        icon: JSX.Element;
+    } | null>(null);
+
     const [tripFormData, setTripFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         driverId: '',
@@ -289,7 +295,6 @@ export default function DashboardPage() {
                 setSelectedVehicleId(null);
             }
 
-            // Грузим аналитику вместе со всеми данными
             const url = selectedVehicleId
                 ? `http://localhost:8080/api/analytics?vehicleId=${selectedVehicleId}`
                 : 'http://localhost:8080/api/analytics';
@@ -313,7 +318,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, selectedVehicleId]);
 
-    // Фоновое обновление каждые 5 сек (если нет симуляций)
+    // Фоновое обновление
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (user && isMounted && activeSimulations.size === 0) {
@@ -324,6 +329,43 @@ export default function DashboardPage() {
         return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, isMounted, activeSimulations]);
+
+    const selectedVehicle = useMemo(() => {
+        return vehicles.find((v) => v.id.toString() === selectedVehicleId);
+    }, [vehicles, selectedVehicleId]);
+
+    // --- ПОГОДА ЧЕРЕЗ OPEN-METEO (Бесплатно, без ключей) ---
+    useEffect(() => {
+        const fetchWeather = async () => {
+            if (!selectedVehicle?.lastLatitude || !selectedVehicle?.lastLongitude) return;
+            try {
+                const res = await axios.get(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${selectedVehicle.lastLatitude}&longitude=${selectedVehicle.lastLongitude}&current_weather=true`
+                );
+                const weather = res.data.current_weather;
+                let icon = <Sun className="h-5 w-5 text-yellow-500" />;
+                let desc = "Ясно";
+                
+                if (weather.weathercode >= 1 && weather.weathercode <= 3) {
+                    icon = <Cloud className="h-5 w-5 text-gray-400" />;
+                    desc = "Облачно";
+                } else if (weather.weathercode >= 51 && weather.weathercode <= 65) {
+                    icon = <CloudRain className="h-5 w-5 text-blue-400" />;
+                    desc = "Дождь";
+                } else if (weather.weathercode >= 71) {
+                    icon = <Snowflake className="h-5 w-5 text-blue-200" />;
+                    desc = "Снег/Холодно";
+                }
+
+                setWeatherData({ temp: weather.temperature, description: desc, icon });
+            } catch (error) {
+                console.error("Ошибка загрузки погоды", error);
+            }
+        };
+        
+        fetchWeather();
+    }, [selectedVehicle?.lastLatitude, selectedVehicle?.lastLongitude]);
+
 
     // --- ОБРАБОТЧИКИ ТЕЛЕМАТИКИ ---
     const handleSimulateDrain = async (vehicleId: number) => {
@@ -389,7 +431,7 @@ export default function DashboardPage() {
         }
     };
 
-    // --- ПЛАВНАЯ СИМУЛЯЦИЯ OSRM ---
+    // --- ПЛАВНАЯ И ЗАМЕДЛЕННАЯ СИМУЛЯЦИЯ OSRM ---
     const startTripSimulation = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const vehicle = vehicles.find((v) => v.id === Number(simulateTripData.vehicleId));
@@ -399,7 +441,7 @@ export default function DashboardPage() {
         const startLat = vehicle.lastLatitude || 53.9045;
         const startLon = vehicle.lastLongitude || 27.5615;
 
-        // Jitter (Шум) чтобы машины не слипались в 1 точке по приезду
+        // Jitter (Шум), чтобы машины не слипались по приезду
         const jitterLat = dest.lat + (Math.random() - 0.5) * 0.0015;
         const jitterLon = dest.lon + (Math.random() - 0.5) * 0.0015;
 
@@ -409,10 +451,11 @@ export default function DashboardPage() {
 
         let pathPoints: [number, number][] = [];
         let actualDistanceKm = 0;
-        const SIMULATION_FRAMES = 250; 
+        
+        // 800 кадров для долгой, медленной и плавной поездки (хватит времени посмотреть)
+        const SIMULATION_FRAMES = 800; 
 
         try {
-            // Используем нативный fetch чтобы обойти CORS preflight
             const response = await fetch(
                 `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${jitterLon},${jitterLat}?overview=full&geometries=geojson`
             );
@@ -470,7 +513,7 @@ export default function DashboardPage() {
             pathPoints.push(routePoints[routePoints.length - 1]);
             
         } catch (err) {
-            console.error('Ошибка OSRM API. Включаем движение по прямой. Причина:', err);
+            console.error('Ошибка OSRM API. Движение по прямой:', err);
             
             actualDistanceKm = calcDistance([startLat, startLon], [jitterLat, jitterLon]) * 1.25;
             const stepLat = (jitterLat - startLat) / SIMULATION_FRAMES;
@@ -533,7 +576,8 @@ export default function DashboardPage() {
                 [vehicle.id]: { mileageAdded: liveDist, fuelUsedAdded: liveFuelUsed },
             }));
 
-            if (i % 20 === 0 || i === SIMULATION_FRAMES) {
+            // Отправляем данные на бэкенд (реже, чтобы не перегружать)
+            if (i % 40 === 0 || i === SIMULATION_FRAMES) {
                 try {
                     await axios.post('http://localhost:8080/api/telematics/data', {
                         vehicleId: vehicle.id,
@@ -547,7 +591,8 @@ export default function DashboardPage() {
                 }
             }
 
-            await new Promise((resolve) => setTimeout(resolve, 30)); 
+            // Задержка 40мс для плавности
+            await new Promise((resolve) => setTimeout(resolve, 40)); 
         }
 
         // Финал поездки
@@ -564,6 +609,10 @@ export default function DashboardPage() {
                 fuelUsed: fuelNeeded,
             });
             await fetchData();
+            
+            // УВЕДОМЛЕНИЕ О ПРИБЫТИИ
+            alert(`✅ Рейс успешно завершен!\nТягач ${vehicle.plateNumber} прибыл в пункт: ${dest.name}.`);
+            
         } catch (err) {
             console.error('Ошибка создания путевого листа при завершении симуляции', err);
         }
@@ -634,10 +683,6 @@ export default function DashboardPage() {
             totalFleetCost: baseCost + telematicsLoss,
         };
     }, [vehicles, alerts, liveStats]);
-
-    const selectedVehicle = useMemo(() => {
-        return vehicles.find((v) => v.id.toString() === selectedVehicleId);
-    }, [vehicles, selectedVehicleId]);
 
     // --- ВЫЧИСЛЕНИЕ МЕТРИК ВЫБРАННОГО ТС ---
     const {
@@ -1162,7 +1207,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <Card className="col-span-1 lg:col-span-2 flex flex-col h-[500px]">
                         
-                        {/* ШАПКА КАРТЫ С КНОПКАМИ УПРАВЛЕНИЯ */}
+                        {/* ШАПКА КАРТЫ С КНОПКАМИ УПРАВЛЕНИЯ И ПОГОДОЙ */}
                         <CardHeader className="flex flex-row justify-between items-center pb-2">
                             <div>
                                 <CardTitle className="flex items-center">
@@ -1173,33 +1218,43 @@ export default function DashboardPage() {
                                 </CardDescription>
                             </div>
                             
-                            {user?.roles.includes('ROLE_ADMIN') && (
-                                <div className="flex space-x-2">
-                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                        <Button
-                                            variant="outline"
-                                            className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                                            onClick={() => {
-                                                setRefuelData({ vehicleId: selectedVehicleId || '', amount: '' });
-                                                setModalState({ type: 'refuel' });
-                                            }}
-                                        >
-                                            <Droplet className="mr-2 h-4 w-4" /> Заправить
-                                        </Button>
-                                    </motion.div>
-                                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                        <Button
-                                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                                            onClick={() => {
-                                                setSimulateTripData({ ...simulateTripData, vehicleId: selectedVehicleId || '' });
-                                                setModalState({ type: 'simulate-trip' });
-                                            }}
-                                        >
-                                            <Navigation className="mr-2 h-4 w-4" /> В рейс
-                                        </Button>
-                                    </motion.div>
-                                </div>
-                            )}
+                            <div className="flex items-center space-x-4">
+                                {/* ВИДЖЕТ ПОГОДЫ */}
+                                {weatherData && selectedVehicleId && (
+                                    <div className="flex items-center bg-muted/50 px-3 py-1.5 rounded-full text-sm font-medium border border-border">
+                                        {weatherData.icon}
+                                        <span className="ml-2">{weatherData.temp}°C, {weatherData.description}</span>
+                                    </div>
+                                )}
+
+                                {user?.roles.includes('ROLE_ADMIN') && (
+                                    <div className="flex space-x-2">
+                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                            <Button
+                                                variant="outline"
+                                                className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                                                onClick={() => {
+                                                    setRefuelData({ vehicleId: selectedVehicleId || '', amount: '' });
+                                                    setModalState({ type: 'refuel' });
+                                                }}
+                                            >
+                                                <Droplet className="mr-2 h-4 w-4" /> Заправить
+                                            </Button>
+                                        </motion.div>
+                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                            <Button
+                                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                onClick={() => {
+                                                    setSimulateTripData({ ...simulateTripData, vehicleId: selectedVehicleId || '' });
+                                                    setModalState({ type: 'simulate-trip' });
+                                                }}
+                                            >
+                                                <Navigation className="mr-2 h-4 w-4" /> В рейс
+                                            </Button>
+                                        </motion.div>
+                                    </div>
+                                )}
+                            </div>
                         </CardHeader>
 
                         <CardContent className="flex-grow p-4 pt-0">
@@ -1247,8 +1302,8 @@ export default function DashboardPage() {
                                             <span
                                                 className={`text-[10px] font-bold px-2 py-1 rounded-md w-fit mb-2 ${
                                                     alert.type === 'FUEL_DROP'
-                                                        ? 'bg-red-100 text-red-800'
-                                                        : 'bg-amber-100 text-amber-800'
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                                                 }`}
                                             >
                                                 {alert.type === 'FUEL_DROP'
