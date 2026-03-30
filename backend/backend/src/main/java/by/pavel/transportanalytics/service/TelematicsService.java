@@ -3,117 +3,114 @@ package by.pavel.transportanalytics.service;
 import by.pavel.transportanalytics.dto.TelematicsDataDto;
 import by.pavel.transportanalytics.model.TelematicsAlert;
 import by.pavel.transportanalytics.model.TelematicsData;
-import by.pavel.transportanalytics.model.Trip;
 import by.pavel.transportanalytics.model.Vehicle;
 import by.pavel.transportanalytics.repository.TelematicsAlertRepository;
 import by.pavel.transportanalytics.repository.TelematicsDataRepository;
-import by.pavel.transportanalytics.repository.TripRepository;
 import by.pavel.transportanalytics.repository.VehicleRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class TelematicsService {
 
-    // Репозитории
-    private final TelematicsDataRepository telematicsRepository;
+    private final TelematicsDataRepository dataRepository;
     private final TelematicsAlertRepository alertRepository;
     private final VehicleRepository vehicleRepository;
-    private final TripRepository tripRepository;
-
-    // Внешние API сервисы
-    private final WeatherService weatherService;
-    private final FuelPriceService fuelPriceService;
-    private final GoogleMapsService googleMapsService;
+    private final MapsService mapsService;
 
     @Value("${telematics.speed.limit:90.0}")
-    private Double speedLimit;
+    private double speedLimit;
 
     @Value("${telematics.fuel.drop.threshold:5.0}")
-    private Double fuelDropThreshold;
+    private double fuelDropThreshold;
 
-    @Transactional
+    public TelematicsService(
+            TelematicsDataRepository dataRepository,
+            TelematicsAlertRepository alertRepository,
+            VehicleRepository vehicleRepository,
+            MapsService mapsService
+    ) {
+        this.dataRepository = dataRepository;
+        this.alertRepository = alertRepository;
+        this.vehicleRepository = vehicleRepository;
+        this.mapsService = mapsService;
+    }
+
     public void processIncomingData(TelematicsDataDto dto) {
-        // Ищем машину в базе
-        Vehicle vehicle = vehicleRepository.findById(dto.getVehicleId())
-                .orElseThrow(() -> new RuntimeException("Транспорт не найден"));
-
-        // Ищем поездку, если она передана
-        Trip trip = null;
-        if (dto.getTripId() != null) {
-            trip = tripRepository.findById(dto.getTripId()).orElse(null);
+        Optional<Vehicle> vehicleOpt = vehicleRepository.findById(dto.getVehicleId());
+        if (vehicleOpt.isEmpty()) {
+            return;
         }
 
-        // 1. Получаем погоду по текущим координатам
-        WeatherService.WeatherData weather = weatherService.getWeatherAtLocation(dto.getLatitude(), dto.getLongitude());
+        Vehicle vehicle = vehicleOpt.get();
 
-        // 2. Сохраняем новую точку маршрута в базу
-        TelematicsData data = new TelematicsData();
-        data.setVehicle(vehicle);
-        data.setTrip(trip);
-        data.setTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
-        data.setLatitude(dto.getLatitude());
-        data.setLongitude(dto.getLongitude());
-        data.setSpeed(dto.getSpeed());
-        data.setFuelLevel(dto.getFuelLevel());
-        data.setWeatherCondition(weather.condition());
-        data.setTemperature(weather.temperature());
+        Optional<TelematicsData> lastDataOpt = dataRepository.findTopByVehicleIdOrderByTimestampDesc(vehicle.getId());
 
-        telematicsRepository.save(data);
+        TelematicsData newData = new TelematicsData();
+        newData.setVehicle(vehicle);
+        newData.setLatitude(dto.getLatitude());
+        newData.setLongitude(dto.getLongitude());
+        newData.setSpeed(dto.getSpeed());
+        newData.setFuelLevel(dto.getFuelLevel());
+        newData.setTimestamp(LocalDateTime.now());
+        dataRepository.save(newData);
 
-        // 3. Анализируем данные на наличие сливов топлива или нарушений скорости
-        analyzeAnomalies(vehicle, data);
-
-        // 4. Обновляем текущие показатели автомобиля (последние известные координаты и уровень бака)
-        vehicle.setCurrentFuelLevel(dto.getFuelLevel());
         vehicle.setLastLatitude(dto.getLatitude());
         vehicle.setLastLongitude(dto.getLongitude());
+        vehicle.setCurrentFuelLevel(dto.getFuelLevel());
         vehicleRepository.save(vehicle);
+
+        checkForSpeeding(vehicle, newData);
+
+        // IDEA Warning FIX: Используем функциональный стиль
+        lastDataOpt.ifPresent(lastData -> checkForFuelDrop(vehicle, lastData, newData));
     }
 
-    private void analyzeAnomalies(Vehicle vehicle, TelematicsData currentData) {
-        // Проверка на превышение скорости
-        if (currentData.getSpeed() != null && currentData.getSpeed() > speedLimit) {
-            String address = googleMapsService.getAddressFromCoordinates(currentData.getLatitude(), currentData.getLongitude());
-            createAlert(vehicle, currentData, "SPEEDING",
-                    String.format("Превышение скорости: %.0f км/ч. Место: %s", currentData.getSpeed(), address),
-                    BigDecimal.ZERO);
-        }
+    private void checkForSpeeding(Vehicle vehicle, TelematicsData data) {
+        if (data.getSpeed() != null && data.getSpeed() > speedLimit) {
+            String address = mapsService.getAddressFromCoordinates(data.getLatitude(), data.getLongitude());
 
-        // Проверка на резкое падение уровня топлива (Слив)
-        if (vehicle.getCurrentFuelLevel() != null) {
-            double fuelDifference = vehicle.getCurrentFuelLevel() - currentData.getFuelLevel();
+            TelematicsAlert alert = new TelematicsAlert();
+            alert.setVehicle(vehicle);
+            alert.setTimestamp(LocalDateTime.now());
+            alert.setType("SPEEDING");
+            alert.setDescription("Превышение скорости: " + data.getSpeed() + " км/ч. Место: " + address);
+            // FIX: Преобразуем double в BigDecimal
+            alert.setFinancialLoss(BigDecimal.ZERO);
 
-            // Если разница больше допустимого порога (например, пропало больше 5 литров за раз)
-            if (fuelDifference > fuelDropThreshold) {
-                BigDecimal currentFuelPrice = fuelPriceService.getCurrentFuelPrice();
-                BigDecimal financialLoss = currentFuelPrice.multiply(BigDecimal.valueOf(fuelDifference));
-
-                String address = googleMapsService.getAddressFromCoordinates(currentData.getLatitude(), currentData.getLongitude());
-
-                createAlert(vehicle, currentData, "FUEL_DROP",
-                        String.format("Слив топлива: %.2f л. Место: %s. Ущерб: %.2f руб", fuelDifference, address, financialLoss),
-                        financialLoss);
-            }
+            alertRepository.save(alert);
         }
     }
 
-    private void createAlert(Vehicle vehicle, TelematicsData data, String type, String description, BigDecimal loss) {
-        TelematicsAlert alert = new TelematicsAlert();
-        alert.setVehicle(vehicle);
-        alert.setTimestamp(data.getTimestamp());
-        alert.setLatitude(data.getLatitude());
-        alert.setLongitude(data.getLongitude());
-        alert.setType(type);
-        alert.setDescription(description);
-        alert.setFinancialLoss(loss);
+    private void checkForFuelDrop(Vehicle vehicle, TelematicsData lastData, TelematicsData newData) {
+        if (lastData.getFuelLevel() == null || newData.getFuelLevel() == null) {
+            return;
+        }
 
-        alertRepository.save(alert);
+        // Защита от ложных срабатываний: если скорость > 5, то падение топлива - это норма
+        if (newData.getSpeed() != null && newData.getSpeed() > 5.0) {
+            return;
+        }
+
+        double drop = lastData.getFuelLevel() - newData.getFuelLevel();
+
+        if (drop >= fuelDropThreshold) {
+            String address = mapsService.getAddressFromCoordinates(newData.getLatitude(), newData.getLongitude());
+            double lossAmount = drop * 2.57;
+
+            TelematicsAlert alert = new TelematicsAlert();
+            alert.setVehicle(vehicle);
+            alert.setTimestamp(LocalDateTime.now());
+            alert.setType("FUEL_DROP");
+            alert.setDescription(String.format("Резкое падение топлива: -%.1f л. Место: %s", drop, address));
+            // FIX: Преобразуем double в BigDecimal
+            alert.setFinancialLoss(BigDecimal.valueOf(lossAmount));
+
+            alertRepository.save(alert);
+        }
     }
 }

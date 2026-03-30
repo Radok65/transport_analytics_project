@@ -11,6 +11,4 @@ public interface TelematicsDataRepository extends JpaRepository<TelematicsData, 
     // Получить всю историю движения конкретного автомобиля, отсортированную по времени
     List<TelematicsData> findAllByVehicleIdOrderByTimestampDesc(Long vehicleId);
 
-    // Получить историю телематики для конкретной поездки
-    List<TelematicsData> findAllByTripIdOrderByTimestampAsc(Long tripId);
 }
