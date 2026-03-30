@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Vehicle } from '@/types';
 
-// Кастомная иконка грузовика
 const truckIcon = new L.Icon({
     iconUrl: 'https://cdn-icons-png.flaticon.com/512/664/664468.png',
     iconSize: [36, 36],
@@ -18,34 +17,56 @@ interface MapProps {
     vehicles: Vehicle[];
     selectedVehicleId: number | null;
     onVehicleSelect: (id: string) => void;
-    activeRoute?: [number, number][]; // Координаты [lat, lon] для отрисовки пути
+    activeRoute?: [number, number][];
 }
 
-// Умный контроллер камеры
+// Компонент умного управления камерой
 function MapCameraController({ vehicles, selectedVehicleId }: { vehicles: Vehicle[], selectedVehicleId: number | null }) {
     const map = useMap();
+    const [isCameraLocked, setIsCameraLocked] = useState(false);
+    const [lastSelected, setLastSelected] = useState<number | null>(null);
 
+    // 1. Первичное центрирование при выборе машины
     useEffect(() => {
-        if (selectedVehicleId) {
-            const v = vehicles.find(v => v.id === selectedVehicleId);
-            if (v && v.lastLatitude && v.lastLongitude) {
-                // Если машина выбрана - летим к ней
-                map.flyTo([v.lastLatitude, v.lastLongitude], 14, { duration: 1.5 });
-            }
-        } else {
-            // Если выбран "Обзор парка" - отдаляем камеру, чтобы вместить все маркеры
-            const validCoords = vehicles
-                .filter(v => v.lastLatitude && v.lastLongitude)
-                .map(v => [v.lastLatitude!, v.lastLongitude!] as [number, number]);
-
-            if (validCoords.length > 0) {
-                const bounds = L.latLngBounds(validCoords);
-                map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 14, duration: 1.5 });
+        if (selectedVehicleId !== lastSelected) {
+            setLastSelected(selectedVehicleId);
+            if (selectedVehicleId) {
+                setIsCameraLocked(true); // Включаем слежение
+                const v = vehicles.find(v => v.id === selectedVehicleId);
+                if (v && v.lastLatitude && v.lastLongitude) {
+                    map.flyTo([v.lastLatitude, v.lastLongitude], 14, { duration: 1.0 });
+                }
             } else {
-                map.flyTo([53.9045, 27.5615], 10);
+                setIsCameraLocked(false);
+                const validCoords = vehicles.filter(v => v.lastLatitude && v.lastLongitude).map(v => [v.lastLatitude!, v.lastLongitude!] as [number, number]);
+                if (validCoords.length > 0) {
+                    map.flyToBounds(L.latLngBounds(validCoords), { padding: [50, 50], maxZoom: 14, duration: 1.0 });
+                }
             }
         }
-    }, [selectedVehicleId, vehicles, map]);
+    }, [selectedVehicleId, lastSelected, map, vehicles]);
+
+    // 2. Плавное слежение за едущей машиной (без рывков)
+    useEffect(() => {
+        if (isCameraLocked && selectedVehicleId) {
+            const v = vehicles.find(v => v.id === selectedVehicleId);
+            if (v && v.lastLatitude && v.lastLongitude) {
+                // setView с animate: false идеально синхронизируется с 30 FPS анимацией фуры
+                map.setView([v.lastLatitude, v.lastLongitude], map.getZoom(), { animate: false });
+            }
+        }
+    }, [vehicles, isCameraLocked, selectedVehicleId, map]);
+
+    // 3. Отключение слежения, если пользователь сам двигает карту
+    useEffect(() => {
+        const disableLock = () => setIsCameraLocked(false);
+        map.on('dragstart', disableLock);
+        map.on('zoomstart', disableLock);
+        return () => {
+            map.off('dragstart', disableLock);
+            map.off('zoomstart', disableLock);
+        };
+    }, [map]);
 
     return null;
 }
@@ -60,7 +81,6 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
             
             <MapCameraController vehicles={vehicles} selectedVehicleId={selectedVehicleId} />
 
-            {/* Отрисовка синей линии маршрута, если есть активная симуляция */}
             {activeRoute && activeRoute.length > 0 && (
                 <Polyline positions={activeRoute} color="#3b82f6" weight={5} opacity={0.7} />
             )}
@@ -73,9 +93,7 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
                         key={vehicle.id} 
                         position={[vehicle.lastLatitude, vehicle.lastLongitude]} 
                         icon={truckIcon}
-                        eventHandlers={{
-                            click: () => onVehicleSelect(vehicle.id.toString()) // Клик на маркер выбирает ТС
-                        }}
+                        eventHandlers={{ click: () => onVehicleSelect(vehicle.id.toString()) }}
                     >
                         <Popup>
                             <div className="font-bold text-lg">{vehicle.plateNumber}</div>
@@ -83,6 +101,7 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
                             <div className="text-blue-600 font-semibold mt-2 flex items-center">
                                 💧 Бак: {vehicle.currentFuelLevel?.toFixed(1) || 0} л.
                             </div>
+                            <div className="text-xs text-gray-400 mt-1">Кликни, чтобы камера следила</div>
                         </Popup>
                     </Marker>
                 );

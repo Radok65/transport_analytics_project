@@ -55,7 +55,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+    <body className={inter.className} suppressHydrationWarning> 
+      
         {/* Оборачиваем все в ThemeProvider */}
         <ThemeProvider
           attribute="class"
