@@ -21,43 +21,65 @@ interface MapProps {
 }
 
 // Компонент умного управления камерой
-function MapCameraController({ vehicles, selectedVehicleId }: { vehicles: Vehicle[], selectedVehicleId: number | null }) {
+function MapCameraController({ 
+    vehicles, 
+    selectedVehicleId, 
+    activeRoute 
+}: { 
+    vehicles: Vehicle[], 
+    selectedVehicleId: number | null, 
+    activeRoute?: [number, number][] 
+}) {
     const map = useMap();
     const [isCameraLocked, setIsCameraLocked] = useState(false);
     const [lastSelected, setLastSelected] = useState<number | null>(null);
+
+    // 0. Высший приоритет: Отдаление на весь маршрут при старте симуляции
+    useEffect(() => {
+        if (activeRoute && activeRoute.length > 0) {
+            setIsCameraLocked(false); // Отключаем слежение за фурой, чтобы видеть весь путь
+            const bounds = L.latLngBounds(activeRoute);
+            // Приближаем карту так, чтобы весь маршрут влез в экран с небольшими отступами
+            map.fitBounds(bounds, { padding: [50, 50], animate: true, duration: 1.0 });
+        }
+    }, [activeRoute, map]);
 
     // 1. Первичное центрирование при выборе машины
     useEffect(() => {
         if (selectedVehicleId !== lastSelected) {
             setLastSelected(selectedVehicleId);
-            if (selectedVehicleId) {
+            
+            // Центрируемся на машине ТОЛЬКО если сейчас нет активного маршрута симуляции
+            if (selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
                 setIsCameraLocked(true); // Включаем слежение
                 const v = vehicles.find(v => v.id === selectedVehicleId);
                 if (v && v.lastLatitude && v.lastLongitude) {
                     map.flyTo([v.lastLatitude, v.lastLongitude], 14, { duration: 1.0 });
                 }
-            } else {
+            } else if (!selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
                 setIsCameraLocked(false);
-                const validCoords = vehicles.filter(v => v.lastLatitude && v.lastLongitude).map(v => [v.lastLatitude!, v.lastLongitude!] as [number, number]);
+                const validCoords = vehicles.filter(v => v.lastLatitude && v.lastLongitude)
+                                            .map(v => [v.lastLatitude!, v.lastLongitude!] as [number, number]);
                 if (validCoords.length > 0) {
                     map.flyToBounds(L.latLngBounds(validCoords), { padding: [50, 50], maxZoom: 14, duration: 1.0 });
                 }
             }
         }
-    }, [selectedVehicleId, lastSelected, map, vehicles]);
+    }, [selectedVehicleId, lastSelected, map, vehicles, activeRoute]);
 
     // 2. Плавное слежение за едущей машиной (без рывков)
     useEffect(() => {
-        if (isCameraLocked && selectedVehicleId) {
+        // Следим только если камера заблокирована на машине И нет активного маршрута
+        if (isCameraLocked && selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
             const v = vehicles.find(v => v.id === selectedVehicleId);
             if (v && v.lastLatitude && v.lastLongitude) {
-                // setView с animate: false идеально синхронизируется с 30 FPS анимацией фуры
+                // setView с animate: false идеально синхронизируется с частой анимацией фуры
                 map.setView([v.lastLatitude, v.lastLongitude], map.getZoom(), { animate: false });
             }
         }
-    }, [vehicles, isCameraLocked, selectedVehicleId, map]);
+    }, [vehicles, isCameraLocked, selectedVehicleId, map, activeRoute]);
 
-    // 3. Отключение слежения, если пользователь сам двигает карту
+    // 3. Отключение слежения, если пользователь сам двигает/зумит карту
     useEffect(() => {
         const disableLock = () => setIsCameraLocked(false);
         map.on('dragstart', disableLock);
@@ -79,12 +101,19 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
                 attribution='&copy; OpenStreetMap contributors'
             />
             
-            <MapCameraController vehicles={vehicles} selectedVehicleId={selectedVehicleId} />
+            {/* Контроллер камеры, куда теперь передается активный маршрут */}
+            <MapCameraController 
+                vehicles={vehicles} 
+                selectedVehicleId={selectedVehicleId} 
+                activeRoute={activeRoute} 
+            />
 
+            {/* Отрисовка линии маршрута */}
             {activeRoute && activeRoute.length > 0 && (
                 <Polyline positions={activeRoute} color="#3b82f6" weight={5} opacity={0.7} />
             )}
             
+            {/* Отрисовка маркеров машин */}
             {vehicles.map(vehicle => {
                 if (!vehicle.lastLatitude || !vehicle.lastLongitude) return null;
                 

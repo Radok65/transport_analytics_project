@@ -75,4 +75,14 @@ public class TelematicsController {
 
         return ResponseEntity.ok(dtoList);
     }
+    // 4. Создание уведомления о прибытии
+    // 4. Создание уведомления о прибытии
+    @PostMapping("/alerts/arrival")
+    public ResponseEntity<String> createArrivalAlert(
+            @RequestParam Long vehicleId,
+            @RequestParam String destinationName) {
+        telematicsService.createArrivalAlert(vehicleId, destinationName);
+        return ResponseEntity.ok("Уведомление о прибытии добавлено в ленту");
+    }
+
 }

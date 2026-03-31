@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, FormEvent, JSX } from 'react';
+import { useState, useEffect, useMemo, FormEvent, JSX, useRef } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -80,14 +80,14 @@ import {
     AlertTriangle,
     FastForward,
     Navigation,
-    Cloud,
-    Sun,
     CloudRain,
+    Sun,
     Snowflake,
+    Cloud
 } from 'lucide-react';
 
 // ==========================================
-// БИБЛИОТЕКИ И PDF
+// БИБЛИОТЕКИ
 // ==========================================
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
@@ -98,6 +98,9 @@ import { DashboardCharts } from '@/components/DashboardCharts';
 import VehicleMap from '@/components/VehicleMap';
 import { TelematicsAlertDto } from '@/types';
 
+// ==========================================
+// НАСТРОЙКИ PDFMAKE
+// ==========================================
 pdfMake.vfs = pdfFonts.vfs;
 pdfMake.fonts = {
     Roboto: {
@@ -107,8 +110,6 @@ pdfMake.fonts = {
         bolditalics: 'Roboto-MediumItalic.ttf',
     },
 };
-
-const MotionTableRow = motion(TableRow);
 
 const FUEL_PRICE_PER_LITER = 2.57;
 
@@ -122,6 +123,14 @@ const DESTINATIONS = [
     { name: 'Брест (ПТЦ "Козловичи")', lat: 52.1250, lon: 23.6800 },
     { name: 'Гомель (СЭЗ)', lat: 52.4345, lon: 30.9754 },
     { name: 'Гродно (Брузги)', lat: 53.6236, lon: 23.6644 },
+    { name: 'Витебск (Свободная эконом. зона)', lat: 55.1904, lon: 30.2049 },
+    { name: 'Могилев (Кроноспан)', lat: 53.8828, lon: 30.3326 },
+    { name: 'Барановичи (Логистический парк)', lat: 53.1326, lon: 26.0139 },
+    { name: 'Пинск (Речной порт)', lat: 52.1153, lon: 26.1023 },
+    { name: 'Бобруйск (Белшина)', lat: 53.1618, lon: 29.1935 },
+    { name: 'Москва (МКАД Запад)', lat: 55.7153, lon: 37.3822 },
+    { name: 'Санкт-Петербург (Шушары)', lat: 59.8115, lon: 30.3857 },
+    { name: 'Смоленск (ТЛЦ Стабна)', lat: 54.8517, lon: 32.0526 },
 ];
 
 // ==========================================
@@ -163,6 +172,11 @@ export interface Vehicle {
     trips: Trip[];
 }
 
+export interface WeatherData {
+    condition: string;
+    temperature: number;
+}
+
 type ModalType =
     | 'add-trip'
     | 'simulate-trip'
@@ -201,9 +215,9 @@ export interface AnalyticsData {
 }
 
 // ==========================================
-// УТИЛИТЫ
+// КОМПОНЕНТЫ И УТИЛИТЫ
 // ==========================================
-const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }) => {
+const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }): JSX.Element => {
     if (order === 'asc') return <ArrowUp className="inline ml-2 h-4 w-4" />;
     if (order === 'desc') return <ArrowDown className="inline ml-2 h-4 w-4" />;
     return <ArrowUpDown className="inline ml-2 h-4 w-4 text-muted-foreground/50" />;
@@ -232,10 +246,14 @@ export default function DashboardPage() {
     const [isMounted, setIsMounted] = useState(false);
     const [isDataLoading, setIsDataLoading] = useState(true);
 
+    // Ref для предотвращения потери выбранного ТС в таймерах
+    const activeVehicleIdRef = useRef<string | null>(null);
+
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [alerts, setAlerts] = useState<TelematicsAlertDto[]>([]);
     const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+    const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(null);
 
     const [modalState, setModalState] = useState<{
         type: ModalType | null;
@@ -263,12 +281,6 @@ export default function DashboardPage() {
         Record<number, { mileageAdded: number; fuelUsedAdded: number }>
     >({});
 
-    const [weatherData, setWeatherData] = useState<{
-        temp: number;
-        description: string;
-        icon: JSX.Element;
-    } | null>(null);
-
     const [tripFormData, setTripFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         driverId: '',
@@ -279,7 +291,8 @@ export default function DashboardPage() {
     });
 
     // --- ЗАГРУЗКА ДАННЫХ ---
-    const fetchData = async () => {
+    
+    const fetchBaseData = async () => {
         try {
             const [vehiclesRes, driversRes, alertsRes] = await Promise.all([
                 axios.get<Vehicle[]>('http://localhost:8080/api/vehicles'),
@@ -294,36 +307,59 @@ export default function DashboardPage() {
             if (vehiclesRes.data.length === 0) {
                 setSelectedVehicleId(null);
             }
+        } catch (error) {
+            console.error('Ошибка при загрузке базовых данных:', error);
+        }
+    };
 
-            const url = selectedVehicleId
-                ? `http://localhost:8080/api/analytics?vehicleId=${selectedVehicleId}`
+    const fetchAnalytics = async (vId: string | null) => {
+        try {
+            const url = vId
+                ? `http://localhost:8080/api/analytics?vehicleId=${vId}`
                 : 'http://localhost:8080/api/analytics';
 
             const analyticsRes = await axios.get<AnalyticsData>(url);
             setAnalyticsData(analyticsRes.data);
-
         } catch (error) {
-            console.error('Ошибка при загрузке данных:', error);
-        } finally {
-            setIsDataLoading(false);
+            console.error('Ошибка при загрузке аналитики:', error);
         }
     };
 
+    const fetchData = async () => {
+        await Promise.all([
+            fetchBaseData(), 
+            fetchAnalytics(activeVehicleIdRef.current)
+        ]);
+        setIsDataLoading(false);
+    };
+
+    // ЭФФЕКТ 1: При первом входе на страницу
     useEffect(() => {
         setIsMounted(true);
         if (user) {
-            setIsDataLoading(true);
+            if (vehicles.length === 0) {
+                setIsDataLoading(true);
+            }
             fetchData();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, selectedVehicleId]);
+    }, [user]);
 
-    // Фоновое обновление
+    // ЭФФЕКТ 2: Синхронизация Ref и обновление графика при клике на машину
+    useEffect(() => {
+        activeVehicleIdRef.current = selectedVehicleId;
+        if (user && !isDataLoading) {
+            fetchAnalytics(selectedVehicleId);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedVehicleId]);
+
+    // ЭФФЕКТ 3: Фоновое обновление машин каждые 5 сек
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (user && isMounted && activeSimulations.size === 0) {
             interval = setInterval(() => {
-                fetchData();
+                fetchBaseData(); 
             }, 5000);
         }
         return () => clearInterval(interval);
@@ -334,38 +370,36 @@ export default function DashboardPage() {
         return vehicles.find((v) => v.id.toString() === selectedVehicleId);
     }, [vehicles, selectedVehicleId]);
 
-    // --- ПОГОДА ЧЕРЕЗ OPEN-METEO (Бесплатно, без ключей) ---
+    // --- ЗАГРУЗКА ПОГОДЫ ---
     useEffect(() => {
         const fetchWeather = async () => {
-            if (!selectedVehicle?.lastLatitude || !selectedVehicle?.lastLongitude) return;
+            // Если машина не выбрана или координат нет, берем координаты Минска (Офис)
+            const lat = selectedVehicle?.lastLatitude ?? 53.9045;
+            const lon = selectedVehicle?.lastLongitude ?? 27.5615;
+            
             try {
-                const res = await axios.get(
-                    `https://api.open-meteo.com/v1/forecast?latitude=${selectedVehicle.lastLatitude}&longitude=${selectedVehicle.lastLongitude}&current_weather=true`
-                );
-                const weather = res.data.current_weather;
-                let icon = <Sun className="h-5 w-5 text-yellow-500" />;
-                let desc = "Ясно";
-                
-                if (weather.weathercode >= 1 && weather.weathercode <= 3) {
-                    icon = <Cloud className="h-5 w-5 text-gray-400" />;
-                    desc = "Облачно";
-                } else if (weather.weathercode >= 51 && weather.weathercode <= 65) {
-                    icon = <CloudRain className="h-5 w-5 text-blue-400" />;
-                    desc = "Дождь";
-                } else if (weather.weathercode >= 71) {
-                    icon = <Snowflake className="h-5 w-5 text-blue-200" />;
-                    desc = "Снег/Холодно";
-                }
-
-                setWeatherData({ temp: weather.temperature, description: desc, icon });
-            } catch (error) {
-                console.error("Ошибка загрузки погоды", error);
+                const res = await axios.get<WeatherData>(`http://localhost:8080/api/weather?lat=${lat}&lon=${lon}`);
+                setCurrentWeather(res.data);
+            } catch (err) {
+                // Игнорируем сетевые ошибки, чтобы не спамить в консоль
             }
         };
-        
-        fetchWeather();
-    }, [selectedVehicle?.lastLatitude, selectedVehicle?.lastLongitude]);
 
+        if (user) {
+            fetchWeather();
+            // Обновляем погоду строго раз в 30 секунд
+            const interval = setInterval(fetchWeather, 30000);
+            return () => clearInterval(interval);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedVehicleId, user]);
+    
+    const getWeatherIcon = (condition: string) => {
+        if (condition.includes('Rain') || condition.includes('Drizzle')) return <CloudRain className="mr-2 h-5 w-5 text-blue-500" />;
+        if (condition.includes('Snow')) return <Snowflake className="mr-2 h-5 w-5 text-cyan-500" />;
+        if (condition.includes('Clear')) return <Sun className="mr-2 h-5 w-5 text-yellow-500" />;
+        return <Cloud className="mr-2 h-5 w-5 text-gray-500" />;
+    };
 
     // --- ОБРАБОТЧИКИ ТЕЛЕМАТИКИ ---
     const handleSimulateDrain = async (vehicleId: number) => {
@@ -431,7 +465,7 @@ export default function DashboardPage() {
         }
     };
 
-    // --- ПЛАВНАЯ И ЗАМЕДЛЕННАЯ СИМУЛЯЦИЯ OSRM ---
+    // --- ПЛАВНАЯ СИМУЛЯЦИЯ OSRM ---
     const startTripSimulation = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const vehicle = vehicles.find((v) => v.id === Number(simulateTripData.vehicleId));
@@ -441,7 +475,6 @@ export default function DashboardPage() {
         const startLat = vehicle.lastLatitude || 53.9045;
         const startLon = vehicle.lastLongitude || 27.5615;
 
-        // Jitter (Шум), чтобы машины не слипались по приезду
         const jitterLat = dest.lat + (Math.random() - 0.5) * 0.0015;
         const jitterLon = dest.lon + (Math.random() - 0.5) * 0.0015;
 
@@ -451,8 +484,6 @@ export default function DashboardPage() {
 
         let pathPoints: [number, number][] = [];
         let actualDistanceKm = 0;
-        
-        // 800 кадров для долгой, медленной и плавной поездки (хватит времени посмотреть)
         const SIMULATION_FRAMES = 800; 
 
         try {
@@ -513,7 +544,7 @@ export default function DashboardPage() {
             pathPoints.push(routePoints[routePoints.length - 1]);
             
         } catch (err) {
-            console.error('Ошибка OSRM API. Движение по прямой:', err);
+            console.error('Ошибка OSRM API. Включаем движение по прямой. Причина:', err);
             
             actualDistanceKm = calcDistance([startLat, startLon], [jitterLat, jitterLon]) * 1.25;
             const stepLat = (jitterLat - startLat) / SIMULATION_FRAMES;
@@ -526,13 +557,24 @@ export default function DashboardPage() {
             setActiveRouteCoords(pathPoints);
         }
 
-        const fuelNeeded = (actualDistanceKm / 100) * vehicle.fuelNorm;
+        // --- ВЛИЯНИЕ ПОГОДЫ НА РАСХОД ---
+        let weatherMultiplier = 1.0;
+        if (currentWeather) {
+            if (currentWeather.condition.includes('Snow') || currentWeather.condition.includes('Rain')) {
+                weatherMultiplier += 0.15;
+            }
+            if (currentWeather.temperature < -10) {
+                weatherMultiplier += 0.10;
+            }
+        }
+
+        const fuelNeeded = ((actualDistanceKm / 100) * vehicle.fuelNorm) * weatherMultiplier;
 
         if ((vehicle.currentFuelLevel || 0) < fuelNeeded) {
             alert(
                 `Недостаточно топлива!\nЕхать: ~${actualDistanceKm.toFixed(
                     0
-                )} км.\nНужно: ${fuelNeeded.toFixed(1)} л.\nВ баке: ${(
+                )} км.\nНужно (с учетом погоды): ${fuelNeeded.toFixed(1)} л.\nВ баке: ${(
                     vehicle.currentFuelLevel || 0
                 ).toFixed(1)} л.`
             );
@@ -576,8 +618,7 @@ export default function DashboardPage() {
                 [vehicle.id]: { mileageAdded: liveDist, fuelUsedAdded: liveFuelUsed },
             }));
 
-            // Отправляем данные на бэкенд (реже, чтобы не перегружать)
-            if (i % 40 === 0 || i === SIMULATION_FRAMES) {
+            if (i % 10 === 0 || i === SIMULATION_FRAMES) {
                 try {
                     await axios.post('http://localhost:8080/api/telematics/data', {
                         vehicleId: vehicle.id,
@@ -587,12 +628,11 @@ export default function DashboardPage() {
                         fuelLevel: currentFuel,
                     });
                 } catch (err) {
-                    // Игнорируем сетевые ошибки симуляции
+                    // Игнорируем ошибки сети во время симуляции
                 }
             }
 
-            // Задержка 40мс для плавности
-            await new Promise((resolve) => setTimeout(resolve, 40)); 
+            await new Promise((resolve) => setTimeout(resolve, 50)); 
         }
 
         // Финал поездки
@@ -608,13 +648,17 @@ export default function DashboardPage() {
                 mileageEnd: lastMileage + actualDistanceKm,
                 fuelUsed: fuelNeeded,
             });
+
+            await axios.post(`http://localhost:8080/api/telematics/alerts/arrival`, null, {
+                params: {
+                    vehicleId: vehicle.id,
+                    destinationName: dest.name
+                }
+            });
+
             await fetchData();
-            
-            // УВЕДОМЛЕНИЕ О ПРИБЫТИИ
-            alert(`✅ Рейс успешно завершен!\nТягач ${vehicle.plateNumber} прибыл в пункт: ${dest.name}.`);
-            
         } catch (err) {
-            console.error('Ошибка создания путевого листа при завершении симуляции', err);
+            console.error('Ошибка создания путевого листа или уведомления при завершении симуляции', err);
         }
 
         setActiveSimulations((prev) => {
@@ -1207,7 +1251,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <Card className="col-span-1 lg:col-span-2 flex flex-col h-[500px]">
                         
-                        {/* ШАПКА КАРТЫ С КНОПКАМИ УПРАВЛЕНИЯ И ПОГОДОЙ */}
+                        {/* ШАПКА КАРТЫ С КНОПКАМИ УПРАВЛЕНИЯ */}
                         <CardHeader className="flex flex-row justify-between items-center pb-2">
                             <div>
                                 <CardTitle className="flex items-center">
@@ -1218,12 +1262,12 @@ export default function DashboardPage() {
                                 </CardDescription>
                             </div>
                             
-                            <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-6">
                                 {/* ВИДЖЕТ ПОГОДЫ */}
-                                {weatherData && selectedVehicleId && (
-                                    <div className="flex items-center bg-muted/50 px-3 py-1.5 rounded-full text-sm font-medium border border-border">
-                                        {weatherData.icon}
-                                        <span className="ml-2">{weatherData.temp}°C, {weatherData.description}</span>
+                                {currentWeather && (
+                                    <div className="flex items-center bg-muted/50 px-3 py-1.5 rounded-md border text-sm font-medium">
+                                        {getWeatherIcon(currentWeather.condition)}
+                                        {currentWeather.temperature > 0 ? '+' : ''}{currentWeather.temperature.toFixed(1)}°C
                                     </div>
                                 )}
 
@@ -1271,10 +1315,10 @@ export default function DashboardPage() {
 
                     <Card className="col-span-1 flex flex-col h-[500px]">
                         <CardHeader>
-                            <CardTitle className="flex items-center text-red-600 dark:text-red-400">
-                                <AlertTriangle className="mr-2 h-5 w-5" /> Лента инцидентов
+                            <CardTitle className="flex items-center">
+                                <AlertTriangle className="mr-2 h-5 w-5" /> Лента событий
                             </CardTitle>
-                            <CardDescription>Сливы топлива и нарушения ПДД</CardDescription>
+                            <CardDescription>Сливы топлива, нарушения ПДД и прибытия</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow overflow-y-auto p-4 pt-0">
                             {alerts.length > 0 ? (
@@ -1302,12 +1346,16 @@ export default function DashboardPage() {
                                             <span
                                                 className={`text-[10px] font-bold px-2 py-1 rounded-md w-fit mb-2 ${
                                                     alert.type === 'FUEL_DROP'
-                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                                        ? 'bg-red-100 text-red-800'
+                                                        : alert.type === 'ARRIVAL'
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : 'bg-amber-100 text-amber-800'
                                                 }`}
                                             >
                                                 {alert.type === 'FUEL_DROP'
                                                     ? '💧 СЛИВ ТОПЛИВА'
+                                                    : alert.type === 'ARRIVAL'
+                                                    ? '✅ ПРИБЫТИЕ'
                                                     : '⚠️ ПРЕВЫШЕНИЕ СКОРОСТИ'}
                                             </span>
                                             <p className="text-sm font-medium">
@@ -1621,7 +1669,7 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* --- СПРАВОЧНИКИ (КНОПКИ ВЫРОВНЕНЫ) --- */}
+                {/* --- СПРАВОЧНИКИ --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Card>
                         <CardHeader className="flex flex-row justify-between items-center">

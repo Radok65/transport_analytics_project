@@ -85,7 +85,20 @@ public class TelematicsService {
             alertRepository.save(alert);
         }
     }
+    public void createArrivalAlert(Long vehicleId, String destinationName) {
+        Optional<Vehicle> vehicleOpt = vehicleRepository.findById(vehicleId);
+        if (vehicleOpt.isPresent()) {
+            Vehicle vehicle = vehicleOpt.get();
+            TelematicsAlert alert = new TelematicsAlert();
+            alert.setVehicle(vehicle);
+            alert.setTimestamp(LocalDateTime.now());
+            alert.setType("ARRIVAL"); // Новый тип события
+            alert.setDescription("Транспорт успешно прибыл в пункт назначения: " + destinationName);
+            alert.setFinancialLoss(BigDecimal.ZERO); // Потерь нет
 
+            alertRepository.save(alert);
+        }
+    }
     private void checkForFuelDrop(Vehicle vehicle, TelematicsData lastData, TelematicsData newData) {
         if (lastData.getFuelLevel() == null || newData.getFuelLevel() == null) {
             return;
