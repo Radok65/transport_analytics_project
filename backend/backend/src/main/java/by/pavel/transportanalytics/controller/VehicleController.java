@@ -59,14 +59,14 @@ public class VehicleController {
     // --- Эндпоинты для связанных сущностей ---
 
     @PostMapping("/{vehicleId}/repairs")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public ResponseEntity<RepairDto> addRepairToVehicle(@PathVariable Long vehicleId, @RequestBody RepairDto repairDto) {
         RepairDto createdRepair = repairService.addRepairToVehicle(vehicleId, repairDto);
         return new ResponseEntity<>(createdRepair, HttpStatus.CREATED);
     }
 
     @PostMapping("/{vehicleId}/trips")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public ResponseEntity<TripDto> addTripToVehicle(@PathVariable Long vehicleId, @RequestBody TripDto tripDto) {
         // Вызываем специальный метод из сервиса, который мы создали
         TripDto createdTrip = tripService.addTripToVehicle(vehicleId, tripDto);

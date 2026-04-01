@@ -6,6 +6,21 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 // ==========================================
+// ИМПОРТЫ КАРТЫ (ДОБАВЛЕНО ДЛЯ ВЫБОРА ТОЧКИ)
+// ==========================================
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Фикс для иконок маркеров в Leaflet при работе с Next.js
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// ==========================================
 // ИМПОРТЫ UI-КОМПОНЕНТОВ (SHADCN)
 // ==========================================
 import { Button } from '@/components/ui/button';
@@ -73,6 +88,18 @@ const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }): JSX.Eleme
 };
 
 // ==========================================
+// Вспомогательный компонент для кликов по карте
+// ==========================================
+function LocationPickerEvents({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
+    useMapEvents({
+        click(e) {
+            onLocationSelect(e.latlng.lat, e.latlng.lng);
+        },
+    });
+    return null;
+}
+
+// ==========================================
 // ГЛАВНЫЙ КОМПОНЕНТ СТРАНИЦЫ
 // ==========================================
 export default function DashboardPage() {
@@ -94,6 +121,10 @@ export default function DashboardPage() {
     const [modalState, setModalState] = useState<{ type: ModalType | null; data?: ModalData }>({ type: null });
     const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
     const [tripSortOrder, setTripSortOrder] = useState<'asc' | 'desc' | 'none'>('none');
+
+    // Состояния для добавления новой точки (интерактивная карта)
+    const [destLat, setDestLat] = useState<number | ''>('');
+    const [destLon, setDestLon] = useState<number | ''>('');
 
     // Для локальной анимации маршрута
     const [activeRouteCoords, setActiveRouteCoords] = useState<[number, number][]>([]);
@@ -258,9 +289,7 @@ export default function DashboardPage() {
             setSimulatedVehicleRouteId(vehicleId);
 
             // Сообщаем бэкенду статус "В ПУТИ"
-            // @ts-ignore (игнорируем если в apiService еще не прописан updateVehicleStatus)
             if (api.updateVehicleStatus) {
-                // @ts-ignore
                 await api.updateVehicleStatus(vehicleId, "В ПУТИ");
             }
             await fetchData(); 
@@ -302,7 +331,6 @@ export default function DashboardPage() {
             }
 
             // Возвращаем статус
-            // @ts-ignore
             if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "СВОБОДЕН");
             
             await fetchData();
@@ -310,9 +338,7 @@ export default function DashboardPage() {
             setSimulatedVehicleRouteId(null);
         } catch (err) {
             console.error(err);
-            // @ts-ignore
             if (api.updateVehicleStatus) {
-                // @ts-ignore
                 try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); await fetchData(); } catch(e){}
             }
             setActiveRouteCoords([]);
@@ -368,6 +394,9 @@ export default function DashboardPage() {
             switch (modalState.type) {
                 case 'add-destination':
                     await api.createDestination({ name: String(vals.name), latitude: Number(vals.lat), longitude: Number(vals.lon) });
+                    // Очистка состояний после сохранения
+                    setDestLat('');
+                    setDestLon('');
                     break;
                 case 'add-trip':
                     await api.createTrip(Number(tripFormData.vehicleId), {
@@ -762,9 +791,9 @@ export default function DashboardPage() {
             {/* МОДАЛЬНЫЕ ОКНА                             */}
             {/* ========================================== */}
 
-            {/* Новая модалка: Добавление точки маршрута */}
-            <Dialog open={modalState.type === 'add-destination'} onOpenChange={() => setModalState({ type: null })}>
-                <DialogContent>
+            {/* Обновленная модалка: Добавление точки маршрута через карту */}
+            <Dialog open={modalState.type === 'add-destination'} onOpenChange={() => { setModalState({ type: null }); setDestLat(''); setDestLon(''); }}>
+                <DialogContent className="sm:max-w-[600px]">
                     <form onSubmit={handleFormSubmit}>
                         <DialogHeader><DialogTitle>Добавить пункт назначения</DialogTitle></DialogHeader>
                         <div className="grid gap-4 py-4">
@@ -772,13 +801,31 @@ export default function DashboardPage() {
                                 <Label className="text-right">Название</Label>
                                 <Input name="name" className="col-span-3" placeholder='Склад "Восточный"' required />
                             </div>
+                            
+                            {/* Интерактивная карта для выбора координат */}
+                            <div className="col-span-4 h-[250px] rounded-md overflow-hidden border">
+                                <MapContainer center={[53.9045, 27.5615]} zoom={11} style={{ height: '100%', width: '100%' }}>
+                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                    <LocationPickerEvents onLocationSelect={(lat, lon) => {
+                                        setDestLat(Number(lat.toFixed(4)));
+                                        setDestLon(Number(lon.toFixed(4)));
+                                    }} />
+                                    {destLat !== '' && destLon !== '' && (
+                                        <Marker position={[Number(destLat), Number(destLon)]} />
+                                    )}
+                                </MapContainer>
+                            </div>
+                            <p className="text-xs text-muted-foreground text-center col-span-4 mt-[-10px]">
+                                Кликните на карту, чтобы выбрать координаты пункта
+                            </p>
+
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label className="text-right">Широта (Lat)</Label>
-                                <Input name="lat" type="number" step="0.0001" className="col-span-3" placeholder="53.9045" required />
+                                <Input name="lat" type="number" step="0.0001" className="col-span-3" value={destLat} onChange={(e) => setDestLat(Number(e.target.value))} required />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label className="text-right">Долгота (Lon)</Label>
-                                <Input name="lon" type="number" step="0.0001" className="col-span-3" placeholder="27.5615" required />
+                                <Input name="lon" type="number" step="0.0001" className="col-span-3" value={destLon} onChange={(e) => setDestLon(Number(e.target.value))} required />
                             </div>
                         </div>
                         <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
