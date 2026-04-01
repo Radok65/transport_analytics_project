@@ -30,6 +30,10 @@ public class RepairServiceImpl implements RepairService {
         repair.setVehicle(vehicle);
 
         Repair savedRepair = repairRepository.save(repair);
+
+        // ДОБАВЬ ЭТИ ДВЕ СТРОКИ:
+        vehicle.setStatus("В РЕМОНТЕ");
+        vehicleRepository.save(vehicle);
         return convertToDto(savedRepair);
     }
 

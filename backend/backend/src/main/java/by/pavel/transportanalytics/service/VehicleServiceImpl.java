@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -98,6 +97,7 @@ public class VehicleServiceImpl implements VehicleService {
         dto.setCurrentFuelLevel(vehicle.getCurrentFuelLevel());
         dto.setLastLatitude(vehicle.getLastLatitude());
         dto.setLastLongitude(vehicle.getLastLongitude());
+        dto.setStatus(vehicle.getStatus());
 
         List<RepairDto> repairDtos = vehicle.getRepairs().stream().map(repair -> {
             RepairDto repairDto = new RepairDto();
