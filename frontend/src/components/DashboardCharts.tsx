@@ -57,13 +57,12 @@ interface ScatterTooltipProps {
     payload?: ScatterPayloadItem[];
 }
 
-// ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавлена сигнатура индекса [key: string]
 interface ComparisonDataPoint {
     name: string;
     value?: number;
     'Текущее ТС'?: number;
     'Среднее по парку'?: number;
-    [key: string]: string | number | undefined; // Это разрешает Recharts читать любые поля
+    [key: string]: string | number | undefined;
 }
 
 const CHART_COLORS = [
@@ -120,21 +119,20 @@ const ScatterTooltip = ({ active, payload }: ScatterTooltipProps) => {
 export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selectedVehicleId, vehicleCount }) => {
   if (!data) return <div className="p-8 text-center text-muted-foreground animate-pulse">Загрузка аналитики...</div>;
 
-  // 1. Данные для Топ-5
-  const barData = Object.entries(data.top5VehiclesByMileage).map(([key, value]) => ({
+  // ИСПРАВЛЕНИЕ: Добавлена защита || {} на случай пустых данных
+  const barData = Object.entries(data.top5VehiclesByMileage || {}).map(([key, value]) => ({
     name: key,
-    mileage: value,
+    mileage: value || 0,
   }));
 
-  // 2. Данные для Сравнения затрат
+  // ИСПРАВЛЕНИЕ: Добавлены || 0 для защиты математики
   let comparisonData: ComparisonDataPoint[] = [];
   let isComparisonChart = false;
 
   if (selectedVehicleId) {
-    // Режим сравнения
     isComparisonChart = true;
-    const avgFuel = vehicleCount > 0 ? data.totalFuelCost / vehicleCount : 0;
-    const avgRepair = vehicleCount > 0 ? data.totalRepairCost / vehicleCount : 0;
+    const avgFuel = vehicleCount > 0 ? (data.totalFuelCost || 0) / vehicleCount : 0;
+    const avgRepair = vehicleCount > 0 ? (data.totalRepairCost || 0) / vehicleCount : 0;
     
     comparisonData = [
       { 
@@ -149,10 +147,9 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selected
       },
     ];
   } else {
-    // Режим обзора
     comparisonData = [
-      { name: 'Топливо', value: data.totalFuelCost },
-      { name: 'Ремонт', value: data.totalRepairCost },
+      { name: 'Топливо', value: data.totalFuelCost || 0 },
+      { name: 'Ремонт', value: data.totalRepairCost || 0 },
     ];
   }
 

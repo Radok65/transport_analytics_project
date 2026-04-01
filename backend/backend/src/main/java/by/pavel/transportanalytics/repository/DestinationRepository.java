@@ -1,9 +1,9 @@
 package by.pavel.transportanalytics.repository;
 
-import by.pavel.transportanalytics.model.TelematicsAlert;
+import by.pavel.transportanalytics.model.Destination;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface TelematicsAlertRepository extends JpaRepository<TelematicsAlert, Long> {
+public interface DestinationRepository extends JpaRepository<Destination, Long> {
 }
