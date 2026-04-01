@@ -43,6 +43,9 @@ public class Vehicle {
     @Column(name = "tank_capacity")
     private Double tankCapacity; // Объем бака в литрах (например, 500.0)
 
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'СВОБОДЕН'")
+    private String status = "СВОБОДЕН";
+
     // Добавь новые связи в конец класса
     @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TelematicsData> telematicsData = new ArrayList<>();

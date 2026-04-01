@@ -16,4 +16,5 @@ public class VehicleDto {
     private Double currentFuelLevel;
     private Double lastLatitude;
     private Double lastLongitude;
+    private String status;
 }

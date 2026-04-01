@@ -95,8 +95,9 @@ export default function DashboardPage() {
     const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
     const [tripSortOrder, setTripSortOrder] = useState<'asc' | 'desc' | 'none'>('none');
 
-    const [activeSimulations, setActiveSimulations] = useState<Set<number>>(new Set());
+    // Для локальной анимации маршрута
     const [activeRouteCoords, setActiveRouteCoords] = useState<[number, number][]>([]);
+    const [simulatedVehicleRouteId, setSimulatedVehicleRouteId] = useState<number | null>(null);
 
     const [simulateTripData, setSimulateTripData] = useState({ vehicleId: '', destinationId: '' });
     const [refuelData, setRefuelData] = useState({ vehicleId: '', amount: '' });
@@ -154,26 +155,29 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedVehicleId]);
 
+    // Фоновое обновление
     useEffect(() => {
         let interval: NodeJS.Timeout;
-        if (user && isMounted && activeSimulations.size === 0) {
-            interval = setInterval(fetchBaseData, 5000);
+        if (user && isMounted) {
+            interval = setInterval(() => {
+                fetchData();
+            }, 5000);
         }
         return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, isMounted, activeSimulations]);
+    }, [user, isMounted]);
 
     const selectedVehicle = useMemo(() => vehicles.find((v) => v.id.toString() === selectedVehicleId), [vehicles, selectedVehicleId]);
     const currentDriver = useMemo(() => drivers.find((d) => d.assignedVehicleId === Number(selectedVehicleId)), [drivers, selectedVehicleId]);
 
-   // --- ЗАГРУЗКА ПОГОДЫ ---
-    const lat = selectedVehicle?.lastLatitude ?? 53.9045;
-    const lon = selectedVehicle?.lastLongitude ?? 27.5615;
+    // --- ЗАГРУЗКА ПОГОДЫ ---
+    const weatherLat = selectedVehicle?.lastLatitude ?? 53.9045;
+    const weatherLon = selectedVehicle?.lastLongitude ?? 27.5615;
 
     useEffect(() => {
         const fetchWeather = async () => {
             try {
-                const res = await axios.get(`http://localhost:8080/api/weather?lat=${lat}&lon=${lon}`);
+                const res = await axios.get(`http://localhost:8080/api/weather?lat=${weatherLat}&lon=${weatherLon}`);
                 setCurrentWeather(res.data);
             } catch (err) {}
         };
@@ -183,8 +187,7 @@ export default function DashboardPage() {
             const interval = setInterval(fetchWeather, 30000);
             return () => clearInterval(interval);
         }
-    // Добавили lat и lon в зависимости! Теперь погода обновится в пути.
-    }, [user, lat, lon]);
+    }, [user, weatherLat, weatherLon]);
 
     const getWeatherIcon = (condition: string) => {
         if (condition.includes('Rain') || condition.includes('Drizzle')) return <CloudRain className="mr-2 h-5 w-5 text-blue-500" />;
@@ -242,7 +245,6 @@ export default function DashboardPage() {
         setModalState({ type: null });
 
         try {
-            // Запрашиваем маршрут у бэкенда
             const res = await api.startSimulation(vehicleId, destinationId);
             const data = res.data;
 
@@ -251,10 +253,17 @@ export default function DashboardPage() {
                 return;
             }
 
-            // Настраиваем анимацию на фронтенде
-            setActiveSimulations((prev) => new Set(prev).add(vehicleId));
             setSelectedVehicleId(String(vehicleId));
             setActiveRouteCoords(data.pathPoints);
+            setSimulatedVehicleRouteId(vehicleId);
+
+            // Сообщаем бэкенду статус "В ПУТИ"
+            // @ts-ignore (игнорируем если в apiService еще не прописан updateVehicleStatus)
+            if (api.updateVehicleStatus) {
+                // @ts-ignore
+                await api.updateVehicleStatus(vehicleId, "В ПУТИ");
+            }
+            await fetchData(); 
 
             const frames = data.pathPoints.length;
             const stepFuel = data.fuelNeeded / frames;
@@ -275,7 +284,6 @@ export default function DashboardPage() {
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
 
-            // Финал поездки (создание путевого листа)
             const dest = destinations.find(d => d.id === destinationId);
             const driver = drivers.find((d) => d.assignedVehicleId === vehicleId);
             const vehicle = vehicles.find((v) => v.id === vehicleId);
@@ -293,11 +301,22 @@ export default function DashboardPage() {
                 await api.sendArrivalAlert(vehicleId, dest.name);
             }
 
+            // Возвращаем статус
+            // @ts-ignore
+            if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "СВОБОДЕН");
+            
             await fetchData();
-            setActiveSimulations((prev) => { const n = new Set(prev); n.delete(vehicleId); return n; });
             setActiveRouteCoords([]);
+            setSimulatedVehicleRouteId(null);
         } catch (err) {
             console.error(err);
+            // @ts-ignore
+            if (api.updateVehicleStatus) {
+                // @ts-ignore
+                try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); await fetchData(); } catch(e){}
+            }
+            setActiveRouteCoords([]);
+            setSimulatedVehicleRouteId(null);
             alert('Ошибка при связи с сервером симуляции');
         }
     };
@@ -520,7 +539,12 @@ export default function DashboardPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="flex-grow p-4 pt-0">
-                            <VehicleMap vehicles={vehicles} selectedVehicleId={selectedVehicleId ? Number(selectedVehicleId) : null} onVehicleSelect={setSelectedVehicleId} activeRoute={activeRouteCoords} />
+                            <VehicleMap 
+                                vehicles={vehicles} 
+                                selectedVehicleId={selectedVehicleId ? Number(selectedVehicleId) : null} 
+                                onVehicleSelect={setSelectedVehicleId} 
+                                activeRoute={selectedVehicleId && Number(selectedVehicleId) === simulatedVehicleRouteId ? activeRouteCoords : []} 
+                            />
                         </CardContent>
                     </Card>
 
@@ -572,7 +596,7 @@ export default function DashboardPage() {
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg">
                                             {selectedVehicle.plateNumber}
-                                            {activeSimulations.has(selectedVehicle.id) && <span className="ml-2 text-sm text-blue-500 animate-pulse">(В пути...)</span>}
+                                            {selectedVehicle.status === 'В ПУТИ' && <span className="ml-2 text-sm text-blue-500 animate-pulse">(В пути...)</span>}
                                         </h3>
                                         <p className="text-sm text-muted-foreground">{selectedVehicle.model}, {selectedVehicle.year} год</p>
 
@@ -591,7 +615,7 @@ export default function DashboardPage() {
                                                         <span className="font-mono text-sm mt-1 text-center">{selectedVehicle.lastLatitude?.toFixed(4) || 'N/A'}<br />{selectedVehicle.lastLongitude?.toFixed(4) || 'N/A'}</span>
                                                     </div>
                                                 </div>
-                                                {user?.roles.includes('ROLE_ADMIN') && !activeSimulations.has(selectedVehicle.id) && (
+                                                {user?.roles.includes('ROLE_ADMIN') && selectedVehicle.status !== 'В ПУТИ' && (
                                                     <div className="grid grid-cols-2 gap-2 mt-4">
                                                         <Button variant="outline" size="sm" onClick={() => handleSimulateSpeeding(selectedVehicle.id)}><FastForward className="mr-2 h-4 w-4 text-orange-500" />Скорость</Button>
                                                         <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => handleSimulateDrain(selectedVehicle.id)}><AlertTriangle className="mr-2 h-4 w-4" />Слив</Button>
@@ -774,7 +798,7 @@ export default function DashboardPage() {
                                 <Label className="text-right">Транспорт</Label>
                                 <Select required value={simulateTripData.vehicleId} onValueChange={(val) => setSimulateTripData({ ...simulateTripData, vehicleId: val })}>
                                     <SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите машину" /></SelectTrigger>
-                                    <SelectContent>{vehicles.filter((v) => !activeSimulations.has(v.id)).map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber}</SelectItem>)}</SelectContent>
+                                    <SelectContent>{vehicles.filter((v) => v.status !== 'В ПУТИ').map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">

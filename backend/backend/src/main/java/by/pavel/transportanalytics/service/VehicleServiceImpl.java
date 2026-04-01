@@ -80,7 +80,14 @@ public class VehicleServiceImpl implements VehicleService {
         //    (для поездок и ремонтов) сработает корректно.
         vehicleRepository.delete(vehicleToDelete);
     }
-
+    @Override
+    @Transactional
+    public void updateVehicleStatus(Long id, String status) {
+        Vehicle vehicle = vehicleRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("ТС не найдено"));
+        vehicle.setStatus(status);
+        vehicleRepository.save(vehicle);
+    }
     private VehicleDto convertToDto(Vehicle vehicle) {
         VehicleDto dto = new VehicleDto();
         dto.setId(vehicle.getId());

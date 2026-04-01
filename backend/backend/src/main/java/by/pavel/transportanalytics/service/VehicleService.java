@@ -9,4 +9,5 @@ public interface VehicleService {
     VehicleDto createVehicle(VehicleDto vehicleDto);
     VehicleDto updateVehicle(Long id, VehicleDto vehicleDto);
     void deleteVehicle(Long id);
+    void updateVehicleStatus(Long id, String status);
 }

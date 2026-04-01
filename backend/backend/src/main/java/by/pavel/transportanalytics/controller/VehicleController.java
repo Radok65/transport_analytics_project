@@ -72,4 +72,9 @@ public class VehicleController {
         TripDto createdTrip = tripService.addTripToVehicle(vehicleId, tripDto);
         return new ResponseEntity<>(createdTrip, HttpStatus.CREATED);
     }
+    @PutMapping("/{id}/status")
+    public ResponseEntity<Void> updateStatus(@PathVariable Long id, @RequestParam String status) {
+        vehicleService.updateVehicleStatus(id, status);
+        return ResponseEntity.ok().build();
+    }
 }

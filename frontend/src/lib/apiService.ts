@@ -12,6 +12,7 @@ export interface Vehicle {
     lastLongitude?: number;
     repairs: Repair[];
     trips: Trip[];
+    status: string;
 }
 
 export interface Driver {
@@ -100,6 +101,8 @@ export const api = {
     createVehicle: (data: any) => apiClient.post<Vehicle>('/vehicles', data),
     updateVehicle: (id: number, data: any) => apiClient.put<Vehicle>(`/vehicles/${id}`, data),
     deleteVehicle: (id: number) => apiClient.delete(`/vehicles/${id}`),
+    updateVehicleStatus: (id: number, status: string) => 
+        apiClient.put(`/vehicles/${id}/status?status=${encodeURIComponent(status)}`),
 
     // --- Водители ---
     getDrivers: () => apiClient.get<Driver[]>('/drivers'),
