@@ -22,9 +22,10 @@ export interface Vehicle {
     model: string;
     year: number;
     fuelNorm: number;
-    currentFuelLevel?: number; // Текущий уровень топлива от датчиков
-    lastLatitude?: number;     // Последняя широта
-    lastLongitude?: number;    // Последняя долгота
+    currentFuelLevel?: number;
+    lastLatitude?: number;
+    lastLongitude?: number;
+    status?: string; // <-- ДОБАВИТЬ ЭТУ СТРОКУ
     repairs: Repair[];
     trips: Trip[];
 }
