@@ -8,6 +8,5 @@ import java.util.Optional;
 
 @Repository
 public interface DriverRepository extends JpaRepository<Driver, Long> {
-    // Находит водителя, за которым закреплен определенный автомобиль
     Optional<Driver> findByAssignedVehicleId(Long vehicleId);
 }

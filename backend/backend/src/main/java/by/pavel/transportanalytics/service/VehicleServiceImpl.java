@@ -63,20 +63,14 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     @Transactional
     public void deleteVehicle(Long id) {
-        // --- ИСПРАВЛЕННАЯ ЛОГИКА ---
-        // 1. Сначала находим сущность, чтобы она была под управлением Hibernate
         Vehicle vehicleToDelete = vehicleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Vehicle with id " + id + " not found"));
 
-        // 2. Находим водителя, который может быть закреплен за этим ТС.
         driverRepository.findByAssignedVehicleId(id).ifPresent(driver -> {
-            // 3. Открепляем ТС от водителя.
             driver.setAssignedVehicle(null);
             driverRepository.save(driver);
         });
 
-        // 4. Теперь безопасно удаляем саму сущность ТС. Каскадное удаление
-        //    (для поездок и ремонтов) сработает корректно.
         vehicleRepository.delete(vehicleToDelete);
     }
     @Override

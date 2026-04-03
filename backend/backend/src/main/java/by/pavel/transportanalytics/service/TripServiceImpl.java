@@ -26,12 +26,9 @@ public class TripServiceImpl implements TripService {
     @Override
     @Transactional
     public TripDto addTrip(TripDto tripDto) {
-        // Этот метод не используется напрямую, так как ему не хватает ID автомобиля.
-        // Из контроллера вызывается метод addTripToVehicle.
         throw new UnsupportedOperationException("This method requires vehicleId. Please use addTripToVehicle.");
     }
 
-    // Правильный метод для использования в контроллере
     @Transactional
     public TripDto addTripToVehicle(Long vehicleId, TripDto tripDto) {
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
@@ -45,7 +42,6 @@ public class TripServiceImpl implements TripService {
 
         return convertToDto(savedTrip);
     }
-
 
     @Override
     @Transactional
@@ -61,7 +57,6 @@ public class TripServiceImpl implements TripService {
         existingTrip.setMileageEnd(tripDto.getMileageEnd());
         existingTrip.setFuelUsed(tripDto.getFuelUsed());
         existingTrip.setDriver(driver);
-        // Автомобиль не меняется, так как поездка привязана к одному ТС
 
         Trip updatedTrip = tripRepository.save(existingTrip);
         return convertToDto(updatedTrip);

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/trips")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')") // Все операции с поездками - только для админа
+@PreAuthorize("hasRole('ADMIN')")
 public class TripController {
 
     private final TripService tripService;

@@ -28,7 +28,6 @@ public class ReportService {
     private final VehicleRepository vehicleRepository;
 
     public byte[] generateFleetSummaryReport() {
-        // Убрали неиспользуемую переменную data
         List<Vehicle> vehicles = vehicleRepository.findAll();
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -52,13 +51,11 @@ public class ReportService {
             for (Vehicle v : vehicles) {
                 int mileage = v.getTrips().stream().mapToInt(Trip::getMileageEnd).max().orElse(0);
 
-                // Исправлено: используем BigDecimal::add
                 BigDecimal fuelCost = v.getTrips().stream()
                         .map(Trip::getFuelUsed)
                         .reduce(BigDecimal.ZERO, BigDecimal::add)
                         .multiply(new BigDecimal("2.57"));
 
-                // Исправлено: используем BigDecimal::add
                 BigDecimal repairCost = v.getRepairs().stream()
                         .map(Repair::getCost)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -66,14 +63,10 @@ public class ReportService {
                 table.addCell(String.valueOf(v.getId()));
                 table.addCell(createRussianCell(v.getPlateNumber(), getRussianFont(10, Font.NORMAL)));
                 table.addCell(createRussianCell(v.getModel(), getRussianFont(10, Font.NORMAL)));
-
-                // Исправлено: предполагаем, что поле называется year (если нет - замени на нужное)
                 table.addCell(String.valueOf(v.getYear()));
-
                 table.addCell(String.format("%, d", mileage));
                 table.addCell(String.format("%.2f", fuelCost.add(repairCost)));
             }
-
             document.add(table);
             document.close();
             return out.toByteArray();
@@ -95,12 +88,10 @@ public class ReportService {
             Font normalFont = getRussianFont(11, Font.NORMAL);
             Font subHeaderFont = getRussianFont(13, Font.BOLD);
 
-            // Исправлено: заменено getYearOfProduction на getYear
             document.add(new Paragraph("Детализированный отчет: " + vehicle.getPlateNumber(), headerFont));
             document.add(new Paragraph("Модель: " + vehicle.getModel() + " (" + vehicle.getYear() + " г.)", normalFont));
             document.add(new Paragraph(" ", normalFont));
 
-            // Секция показателей
             document.add(new Paragraph("Ключевые показатели:", subHeaderFont));
             PdfPTable statsTable = new PdfPTable(2);
             statsTable.setSpacingBefore(10);
@@ -115,7 +106,6 @@ public class ReportService {
             document.add(statsTable);
             document.add(new Paragraph(" ", normalFont));
 
-            // История поездок
             if (!vehicle.getTrips().isEmpty()) {
                 document.add(new Paragraph("Последние поездки:", subHeaderFont));
                 PdfPTable tripTable = new PdfPTable(3);
@@ -128,7 +118,6 @@ public class ReportService {
                         .limit(10)
                         .forEach(t -> {
                             tripTable.addCell(t.getDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
-                            // Исправлено: убран лишний String.valueOf
                             tripTable.addCell((t.getMileageEnd() - t.getMileageStart()) + " км");
                             tripTable.addCell(String.format(java.util.Locale.US, "%.1f", t.getFuelUsed().doubleValue()));
                         });

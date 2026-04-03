@@ -14,23 +14,17 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AnalyticsDto {
-    // --- Глобальные метрики автопарка ---
+
     private Map<String, Integer> top5VehiclesByMileage;
     private BigDecimal totalFuelCost;
     private BigDecimal totalRepairCost;
     private List<VehiclePerformancePoint> fleetPerformanceMatrix;
-
-    // Новые поля для снятия нагрузки с фронтенда
     private Integer totalFleetMileage;
     private Integer mileageThisMonth;
     private BigDecimal totalFleetCost;
-
-    // --- Детальные метрики конкретного ТС (заполняются, если передан vehicleId) ---
     private List<TripEfficiencyPoint> vehicleEfficiencyTrend;
     private BigDecimal vehicleFuelCost;
     private BigDecimal vehicleRepairCost;
-
-    // Новые поля для карточки конкретной машины
     private Integer vehicleTotalMileage;
     private BigDecimal vehicleCostPerKm;
     private Double vehicleAvgFuelConsumption;

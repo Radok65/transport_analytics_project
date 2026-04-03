@@ -3,7 +3,6 @@
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import axios from 'axios';
 
-// Настраиваем axios для автоматической отправки cookies
 axios.defaults.withCredentials = true;
 
 interface User {
@@ -31,7 +30,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const response = await axios.get('http://localhost:8080/api/users/me');
                 setUser(response.data);
             } catch {
-                // Исправлено: убрана переменная error, так как она не используется
+
                 console.log("Пользователь не авторизован");
                 setUser(null);
             } finally {

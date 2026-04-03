@@ -16,7 +16,6 @@ public class ReferenceDataController {
 
     @GetMapping
     public ResponseEntity<ReferenceDataDto> getReferenceData() {
-        // Эти данные в идеале должны лежать в БД, но пока мы просто убираем хардкод с фронта
         List<ReferenceDataDto.DestinationDto> destinations = Arrays.asList(
                 new ReferenceDataDto.DestinationDto("ТЛЦ \"Колядичи\" (Минск-Юг)", 53.8055, 27.5615),
                 new ReferenceDataDto.DestinationDto("ТЛЦ \"Прилесье\" (Минск-Восток)", 53.8105, 27.7942),

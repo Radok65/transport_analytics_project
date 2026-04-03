@@ -31,26 +31,25 @@
     --radius: 0.5rem
   }
   .dark {
-    /* --- ИЗМЕНЕНИЯ ЗДЕСЬ: Новая графитовая тема --- */
-    --background: 228 6% 15%; /* Очень темный графит */
-    --foreground: 210 40% 98%; /* Светлый текст */
-    --card: 228 6% 20%; /* Графит для карточек (чуть светлее фона) */
+    --background: 228 6% 15%;
+    --foreground: 210 40% 98%;
+    --card: 228 6% 20%;
     --card-foreground: 210 40% 98%;
     --popover: 228 6% 15%;
     --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%; /* Светлые кнопки на темном фоне */
-    --primary-foreground: 228 6% 15%; /* Темный текст на светлых кнопках */
+    --primary: 210 40% 98%;
+    --primary-foreground: 228 6% 15%;
     --secondary: 228 6% 25%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 228 6% 25%; /* Цвет для KPI-карточек и ховера в таблице */
-    --muted-foreground: 215 20.2% 65.1%; /* Приглушенный текст */
+    --muted: 228 6% 25%;
+    --muted-foreground: 215 20.2% 65.1%;
     --accent: 228 6% 25%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
     --border: 228 6% 25%;
     --input: 228 6% 25%;
-    --ring: 217 91% 60%; /* Ярко-синий для фокуса */
+    --ring: 217 91% 60%;
   }
 }
 

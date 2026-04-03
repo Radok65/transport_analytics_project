@@ -127,7 +127,6 @@ public class AnalyticsService {
                     .divide(BigDecimal.valueOf(totalDistance), 2, RoundingMode.HALF_UP);
         }
 
-        // Исправлено: используем примитивный тип double
         double avgFuelConsumption = 0.0;
         double fuelNormDeviation = 0.0;
 
@@ -168,7 +167,6 @@ public class AnalyticsService {
         BigDecimal fuelCost = calculateFuelCost(vehicle.getTrips());
         BigDecimal repairCost = calculateRepairCost(vehicle.getRepairs());
 
-        // Исправлено: поменяли местами filter и map
         BigDecimal alertLosses = allAlerts.stream()
                 .filter(a -> a.getVehicle() != null && a.getVehicle().getId().equals(vehicle.getId()))
                 .map(TelematicsAlert::getFinancialLoss)
@@ -184,8 +182,6 @@ public class AnalyticsService {
                 .costPerKm(costPerKm.doubleValue())
                 .build();
     }
-
-    // --- Вспомогательные методы (Убрали дублирование кода) ---
 
     private BigDecimal calculateFuelCost(List<Trip> trips) {
         return trips.stream()

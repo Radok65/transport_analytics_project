@@ -23,12 +23,10 @@ public class Driver {
     @Column
     private String contact;
 
-    // Связь: Один водитель -> Один закрепленный автомобиль
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_vehicle_id", referencedColumnName = "id")
     private Vehicle assignedVehicle;
 
-    // Связь: Один водитель -> Много поездок
     @OneToMany(
             mappedBy = "driver"
     )

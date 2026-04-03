@@ -25,14 +25,13 @@ public class TelematicsAlert {
     private LocalDateTime timestamp;
 
     @Column(nullable = false)
-    private String type; // Тип: FUEL_DROP (слив), SPEEDING (превышение скорости)
+    private String type;
 
     private Double latitude;
     private Double longitude;
 
-    private String description; // Например: "Резкое падение топлива на 15 литров"
+    private String description;
 
-    // --- Данные от Fuel Price API ---
     @Column(name = "financial_loss", precision = 10, scale = 2)
-    private BigDecimal financialLoss; // Финансовые потери от слива в валюте
+    private BigDecimal financialLoss;
 }

@@ -20,8 +20,6 @@ public class DestinationController {
         return ResponseEntity.ok(destinationService.getAllDestinations());
     }
 
-    // Создавать могут только администраторы, либо просто авторизованные пользователи
-    // (настроим в SecurityConfig, но пока открываем доступ для фронта)
     @PostMapping
     public ResponseEntity<DestinationDto> create(@RequestBody DestinationDto dto) {
         return ResponseEntity.ok(destinationService.createDestination(dto));

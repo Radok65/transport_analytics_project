@@ -34,13 +34,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Включаем CORS, используя конфигурацию из бина corsConfigurationSource()
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Разрешаем анонимный доступ к регистрации, входу и проверке состояния
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/health", "/api/telemetry/**").permitAll()
-                        // Все остальные запросы требуют аутентификации
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
@@ -53,31 +50,20 @@ public class SecurityConfig {
                         .logoutSuccessHandler((request, response, authentication) -> response.setStatus(HttpStatus.OK.value()))
                 )
                 .exceptionHandling(e -> e
-                        // При попытке доступа к защищенному ресурсу без аутентификации возвращаем 401
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                 );
 
         return http.build();
     }
 
-    /**
-     * Конфигурация CORS. Этот бин позволяет фронтенду (localhost:3000)
-     * безопасно обращаться к бэкенду (localhost:8080).
-     */
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Указываем, с каких адресов можно делать запросы
         configuration.setAllowedOrigins(List.of("http://localhost:3000"));
-        // Указываем разрешенные HTTP-методы
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        // Указываем разрешенные заголовки
         configuration.setAllowedHeaders(List.of("*"));
-        // Разрешаем отправку учетных данных (cookies)
         configuration.setAllowCredentials(true);
-
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        // Применяем эту конфигурацию для всех путей, начинающихся с /api/
         source.registerCorsConfiguration("/api/**", configuration);
         return source;
     }

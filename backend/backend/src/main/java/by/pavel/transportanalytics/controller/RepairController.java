@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/repairs")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')") // Все операции с ремонтами - только для админа
+@PreAuthorize("hasRole('ADMIN')")
 public class RepairController {
 
     private final RepairService repairService;

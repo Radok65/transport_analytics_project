@@ -21,15 +21,12 @@ public class RestExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
     }
 
-    // --- ДОБАВЛЕННЫЙ ОБРАБОТЧИК ---
     @ExceptionHandler(IllegalStateException.class)
     protected ResponseEntity<Object> handleIllegalState(IllegalStateException ex) {
         Map<String, String> body = Map.of(
                 "status", "error",
                 "message", ex.getMessage()
         );
-        // Статус 409 Conflict отлично подходит для ситуаций,
-        // когда действие не может быть выполнено из-за текущего состояния системы.
         return new ResponseEntity<>(body, HttpStatus.CONFLICT);
     }
 }

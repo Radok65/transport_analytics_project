@@ -26,7 +26,6 @@ public class Repair {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal cost;
 
-    // Связь: Много ремонтов -> Один автомобиль
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id", nullable = false)
     private Vehicle vehicle;

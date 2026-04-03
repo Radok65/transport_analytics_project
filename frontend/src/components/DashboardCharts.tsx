@@ -5,7 +5,6 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
-// Интерфейсы данных
 interface VehiclePerformancePoint {
     plateNumber: string;
     totalMileage: number;
@@ -33,7 +32,6 @@ interface DashboardChartsProps {
   vehicleCount: number;
 }
 
-// Типы для графиков
 interface TooltipPayloadItem {
     color: string;
     name: string;
@@ -119,13 +117,11 @@ const ScatterTooltip = ({ active, payload }: ScatterTooltipProps) => {
 export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selectedVehicleId, vehicleCount }) => {
   if (!data) return <div className="p-8 text-center text-muted-foreground animate-pulse">Загрузка аналитики...</div>;
 
-  // ИСПРАВЛЕНИЕ: Добавлена защита || {} на случай пустых данных
   const barData = Object.entries(data.top5VehiclesByMileage || {}).map(([key, value]) => ({
     name: key,
     mileage: value || 0,
   }));
 
-  // ИСПРАВЛЕНИЕ: Добавлены || 0 для защиты математики
   let comparisonData: ComparisonDataPoint[] = [];
   let isComparisonChart = false;
 
@@ -156,7 +152,6 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selected
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 mb-8">
       
-      {/* ГРАФИК 1: Топ-5 ТС по пробегу */}
       <Card className="shadow-sm hover:shadow-md transition-shadow">
         <CardHeader>
           <CardTitle className="text-lg">Топ-5 ТС по пробегу</CardTitle>
@@ -192,7 +187,6 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selected
         </CardContent>
       </Card>
 
-      {/* ГРАФИК 2: Затраты */}
       <Card className="shadow-sm hover:shadow-md transition-shadow">
         <CardHeader>
           <CardTitle className="text-lg">
@@ -239,7 +233,6 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selected
         </CardContent>
       </Card>
 
-      {/* ГРАФИК 3: Матрица Эффективности */}
       {!selectedVehicleId && data.fleetPerformanceMatrix && (
         <Card className="col-span-1 md:col-span-2 shadow-sm hover:shadow-md transition-shadow border-l-4 border-l-blue-600">
           <CardHeader>
@@ -277,7 +270,6 @@ export const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, selected
         </Card>
       )}
 
-      {/* ГРАФИК 4: Динамика расхода */}
       {selectedVehicleId && data.vehicleEfficiencyTrend && (
         <Card className="col-span-1 md:col-span-2 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader>

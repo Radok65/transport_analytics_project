@@ -25,10 +25,9 @@ public class WeatherService {
                     .queryParam("lat", lat)
                     .queryParam("lon", lon)
                     .queryParam("appid", apiKey)
-                    .queryParam("units", "metric") // Запрашиваем температуру в градусах Цельсия
+                    .queryParam("units", "metric")
                     .toUriString();
 
-            // Выполняем GET-запрос к API погоды
             Map<String, Object> response = restTemplate.getForObject(url, Map.class);
 
             if (response != null) {
@@ -41,13 +40,10 @@ public class WeatherService {
                 return new WeatherData(condition, temp);
             }
         } catch (Exception e) {
-            // Если API недоступен или ключ недействителен, перехватываем ошибку,
-            // чтобы приложение не упало, и возвращаем пустые данные.
+
             System.err.println("Ошибка получения погоды: " + e.getMessage());
         }
         return new WeatherData("Unknown", 0.0);
     }
-
-    // Record для удобного возврата двух значений сразу
     public record WeatherData(String condition, Double temperature) {}
 }

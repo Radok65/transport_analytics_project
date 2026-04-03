@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/weather")
-@CrossOrigin(origins = "http://localhost:3000") // Разрешаем запросы с фронта
+@CrossOrigin(origins = "http://localhost:3000")
 public class WeatherController {
 
     private final WeatherService weatherService;

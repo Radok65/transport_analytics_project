@@ -1,10 +1,9 @@
-// src/types/index.ts
 
 export interface Repair {
   id: number;
-  date: string; // LocalDate приходит как строка "YYYY-MM-DD"
+  date: string; 
   description: string;
-  cost: number; // BigDecimal приходит как число
+  cost: number; 
 }
 
 export interface Trip {
@@ -25,7 +24,7 @@ export interface Vehicle {
     currentFuelLevel?: number;
     lastLatitude?: number;
     lastLongitude?: number;
-    status?: string; // <-- ДОБАВИТЬ ЭТУ СТРОКУ
+    status?: string; 
     repairs: Repair[];
     trips: Trip[];
 }
@@ -49,7 +48,7 @@ export interface TripEfficiencyPoint {
 }
 
 export interface AnalyticsData {
-  top5VehiclesByMileage: Record<string, number>; // Map<String, Integer>
+  top5VehiclesByMileage: Record<string, number>; 
   totalFuelCost: number;
   totalRepairCost: number;
   fleetPerformanceMatrix: VehiclePerformancePoint[];
@@ -63,7 +62,7 @@ export interface TelematicsAlertDto {
   vehicleId: number;
   plateNumber: string;
   timestamp: string;
-  type: string; // "FUEL_DROP" или "SPEEDING"
+  type: string;
   latitude: number;
   longitude: number;
   description: string;

@@ -30,9 +30,8 @@ public class Trip {
     @Column(name = "fuel_used", nullable = false, precision = 7, scale = 2)
     private BigDecimal fuelUsed;
 
-    // Добавь статус поездки
     @Column(nullable = false)
-    private String status = "PLANNED"; // PLANNED (запланирована), IN_PROGRESS (в пути), COMPLETED (завершена)
+    private String status = "PLANNED";
 
     @Column(name = "start_time")
     private LocalDateTime startTime;
@@ -40,15 +39,13 @@ public class Trip {
     @Column(name = "end_time")
     private LocalDateTime endTime;
 
-    // Затраты на топливо в деньгах (будем считать через Fuel API)
     @Column(name = "fuel_cost", precision = 10, scale = 2)
     private BigDecimal fuelCost;
-    // Связь: Много поездок -> Один автомобиль
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id", nullable = false)
     private Vehicle vehicle;
 
-    // Связь: Много поездок -> Один водитель
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "driver_id", nullable = false)
     private Driver driver;

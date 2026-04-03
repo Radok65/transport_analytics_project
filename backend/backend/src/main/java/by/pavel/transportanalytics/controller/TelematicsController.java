@@ -24,19 +24,15 @@ public class TelematicsController {
     private final TelematicsDataRepository dataRepository;
     private final TelematicsAlertRepository alertRepository;
 
-    // 1. Прием данных от машины (или симулятора)
     @PostMapping("/data")
     public ResponseEntity<String> receiveTelematicsData(@RequestBody TelematicsDataDto dataDto) {
         telematicsService.processIncomingData(dataDto);
         return ResponseEntity.ok("Данные телематики успешно обработаны");
     }
 
-    // 2. Получение истории движения конкретной машины (для карты)
     @GetMapping("/vehicle/{vehicleId}/history")
     public ResponseEntity<List<TelematicsDataDto>> getVehicleHistory(@PathVariable Long vehicleId) {
-        // Получаем точки, отсортированные от новых к старым
         List<TelematicsData> history = dataRepository.findAllByVehicleIdOrderByTimestampDesc(vehicleId);
-
         List<TelematicsDataDto> dtoList = history.stream().map(data -> TelematicsDataDto.builder()
                 .vehicleId(data.getVehicle().getId())
                 .plateNumber(data.getVehicle().getPlateNumber())
@@ -50,16 +46,12 @@ public class TelematicsController {
                 .temperature(data.getTemperature())
                 .build()
         ).collect(Collectors.toList());
-
         return ResponseEntity.ok(dtoList);
     }
 
-    // 3. Получение всех инцидентов (алертов) для дашборда
     @GetMapping("/alerts")
     public ResponseEntity<List<TelematicsAlertDto>> getAllAlerts() {
-        // Сортируем так, чтобы свежие инциденты были сверху
         List<TelematicsAlert> alerts = alertRepository.findAll(Sort.by(Sort.Direction.DESC, "timestamp"));
-
         List<TelematicsAlertDto> dtoList = alerts.stream().map(alert -> TelematicsAlertDto.builder()
                 .id(alert.getId())
                 .vehicleId(alert.getVehicle().getId())
@@ -72,11 +64,9 @@ public class TelematicsController {
                 .financialLoss(alert.getFinancialLoss())
                 .build()
         ).collect(Collectors.toList());
-
         return ResponseEntity.ok(dtoList);
     }
-    // 4. Создание уведомления о прибытии
-    // 4. Создание уведомления о прибытии
+
     @PostMapping("/alerts/arrival")
     public ResponseEntity<String> createArrivalAlert(
             @RequestParam Long vehicleId,

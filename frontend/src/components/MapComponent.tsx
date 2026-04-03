@@ -6,7 +6,6 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Vehicle } from '@/types';
 
-// Динамическое создание яркой HTML-иконки
 const createVehicleIcon = (isSelected: boolean) => {
     return L.divIcon({
         className: 'custom-vehicle-icon',
@@ -38,7 +37,6 @@ interface MapProps {
     activeRoute?: [number, number][];
 }
 
-// Компонент умного управления камерой
 function MapCameraController({ 
     vehicles, 
     selectedVehicleId, 
@@ -52,7 +50,6 @@ function MapCameraController({
     const [isCameraLocked, setIsCameraLocked] = useState(false);
     const [lastSelected, setLastSelected] = useState<number | null>(null);
 
-    // 0. Высший приоритет: Отдаление на весь маршрут при старте симуляции
     useEffect(() => {
         if (activeRoute && activeRoute.length > 0) {
             setIsCameraLocked(false); 
@@ -61,7 +58,6 @@ function MapCameraController({
         }
     }, [activeRoute, map]);
 
-    // 1. Первичное центрирование при выборе машины
     useEffect(() => {
         if (selectedVehicleId !== lastSelected) {
             setLastSelected(selectedVehicleId);
@@ -83,7 +79,6 @@ function MapCameraController({
         }
     }, [selectedVehicleId, lastSelected, map, vehicles, activeRoute]);
 
-    // 2. Плавное слежение за едущей машиной
     useEffect(() => {
         if (isCameraLocked && selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
             const v = vehicles.find(v => v.id === selectedVehicleId);
@@ -93,7 +88,6 @@ function MapCameraController({
         }
     }, [vehicles, isCameraLocked, selectedVehicleId, map, activeRoute]);
 
-    // 3. Отключение слежения при ручном зуме
     useEffect(() => {
         const disableLock = () => setIsCameraLocked(false);
         map.on('dragstart', disableLock);
@@ -121,12 +115,10 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
                 activeRoute={activeRoute} 
             />
 
-            {/* Отрисовка линии маршрута (сделана чуть толще для видимости) */}
             {activeRoute && activeRoute.length > 0 && (
                 <Polyline positions={activeRoute} color="#3b82f6" weight={6} opacity={0.8} />
             )}
-            
-            {/* Отрисовка маркеров машин */}
+
             {vehicles.map(vehicle => {
                 if (!vehicle.lastLatitude || !vehicle.lastLongitude) return null;
                 
@@ -136,9 +128,7 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
                     <Marker 
                         key={vehicle.id} 
                         position={[vehicle.lastLatitude, vehicle.lastLongitude]} 
-                        // Иконка генерируется динамически: красная если выбрана, синяя если нет
                         icon={createVehicleIcon(isSelected)}
-                        // Устанавливаем zIndexOffset чтобы выбранная машина всегда была поверх остальных
                         zIndexOffset={isSelected ? 1000 : 0}
                         eventHandlers={{ click: () => onVehicleSelect(vehicle.id.toString()) }}
                     >

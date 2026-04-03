@@ -4,15 +4,10 @@ import { useState, useEffect, useMemo, FormEvent, JSX, useRef } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-// ==========================================
-// ИМПОРТЫ КАРТЫ (ДОБАВЛЕНО ДЛЯ ВЫБОРА ТОЧКИ)
-// ==========================================
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// Фикс для иконок маркеров в Leaflet при работе с Next.js
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -20,9 +15,6 @@ L.Icon.Default.mergeOptions({
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// ==========================================
-// ИМПОРТЫ UI-КОМПОНЕНТОВ (SHADCN)
-// ==========================================
 import { Button } from '@/components/ui/button';
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -46,18 +38,12 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 
-// ==========================================
-// ИКОНКИ
-// ==========================================
 import {
     MoreHorizontal, PlusCircle, FileDown, Wrench, Map as MapIcon, FileText,
     UserPlus, UserCheck, ArrowUpDown, ArrowUp, ArrowDown, Droplet, Activity,
     MapPin, AlertTriangle, FastForward, Navigation, CloudRain, Sun, Snowflake, Cloud, MapPinned
 } from 'lucide-react';
 
-// ==========================================
-// БИБЛИОТЕКИ И КОМПОНЕНТЫ
-// ==========================================
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { DashboardCharts } from '@/components/DashboardCharts';
@@ -66,9 +52,6 @@ import { TelematicsAlertDto } from '@/types';
 import api, { Vehicle, Driver, Destination, AnalyticsData } from '@/lib/apiService';
 import axios from 'axios';
 
-// ==========================================
-// ИНТЕРФЕЙСЫ И УТИЛИТЫ
-// ==========================================
 export interface WeatherData {
     condition: string;
     temperature: number;
@@ -87,9 +70,6 @@ const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }): JSX.Eleme
     return <ArrowUpDown className="inline ml-2 h-4 w-4 text-muted-foreground/50" />;
 };
 
-// ==========================================
-// Вспомогательный компонент для кликов по карте
-// ==========================================
 function LocationPickerEvents({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
     useMapEvents({
         click(e) {
@@ -99,9 +79,6 @@ function LocationPickerEvents({ onLocationSelect }: { onLocationSelect: (lat: nu
     return null;
 }
 
-// ==========================================
-// ГЛАВНЫЙ КОМПОНЕНТ СТРАНИЦЫ
-// ==========================================
 export default function DashboardPage() {
     const { user, isLoading: isAuthLoading, logout } = useAuth();
     const router = useRouter();
@@ -122,11 +99,9 @@ export default function DashboardPage() {
     const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
     const [tripSortOrder, setTripSortOrder] = useState<'asc' | 'desc' | 'none'>('none');
 
-    // Состояния для добавления новой точки (интерактивная карта)
     const [destLat, setDestLat] = useState<number | ''>('');
     const [destLon, setDestLon] = useState<number | ''>('');
 
-    // Для локальной анимации маршрута
     const [activeRouteCoords, setActiveRouteCoords] = useState<[number, number][]>([]);
     const [simulatedVehicleRouteId, setSimulatedVehicleRouteId] = useState<number | null>(null);
 
@@ -137,7 +112,6 @@ export default function DashboardPage() {
         driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '',
     });
 
-    // --- ЗАГРУЗКА БАЗОВЫХ ДАННЫХ ---
     const fetchBaseData = async () => {
         try {
             const [vRes, dRes, destRes, aRes] = await Promise.all([
@@ -156,7 +130,6 @@ export default function DashboardPage() {
         }
     };
 
-    // --- ЗАГРУЗКА АНАЛИТИКИ ---
     const fetchAnalytics = async (vId: string | null) => {
         try {
             const res = await api.getAnalytics(vId);
@@ -177,16 +150,15 @@ export default function DashboardPage() {
             if (vehicles.length === 0) setIsDataLoading(true);
             fetchData();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [user]);
 
     useEffect(() => {
         activeVehicleIdRef.current = selectedVehicleId;
         if (user && !isDataLoading) fetchAnalytics(selectedVehicleId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [selectedVehicleId]);
 
-    // Фоновое обновление
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (user && isMounted) {
@@ -195,13 +167,12 @@ export default function DashboardPage() {
             }, 5000);
         }
         return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [user, isMounted]);
 
     const selectedVehicle = useMemo(() => vehicles.find((v) => v.id.toString() === selectedVehicleId), [vehicles, selectedVehicleId]);
     const currentDriver = useMemo(() => drivers.find((d) => d.assignedVehicleId === Number(selectedVehicleId)), [drivers, selectedVehicleId]);
 
-    // --- ЗАГРУЗКА ПОГОДЫ ---
     const weatherLat = selectedVehicle?.lastLatitude ?? 53.9045;
     const weatherLon = selectedVehicle?.lastLongitude ?? 27.5615;
 
@@ -227,7 +198,6 @@ export default function DashboardPage() {
         return <Cloud className="mr-2 h-5 w-5 text-gray-500" />;
     };
 
-    // --- ОБРАБОТЧИКИ ТЕЛЕМАТИКИ И ЗАПРАВКИ ---
     const handleSimulateDrain = async (vehicleId: number) => {
         const vehicle = vehicles.find((v) => v.id === vehicleId);
         if (!vehicle) return;
@@ -268,7 +238,6 @@ export default function DashboardPage() {
         } catch (error) { alert('Ошибка при заправке ТС'); }
     };
 
-    // --- ПЛАВНАЯ СИМУЛЯЦИЯ (СЕРВЕРНАЯ) ---
     const startTripSimulation = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const vehicleId = Number(simulateTripData.vehicleId);
@@ -288,7 +257,6 @@ export default function DashboardPage() {
             setActiveRouteCoords(data.pathPoints);
             setSimulatedVehicleRouteId(vehicleId);
 
-            // Сообщаем бэкенду статус "В ПУТИ"
             if (api.updateVehicleStatus) {
                 await api.updateVehicleStatus(vehicleId, "В ПУТИ");
             }
@@ -330,7 +298,6 @@ export default function DashboardPage() {
                 await api.sendArrivalAlert(vehicleId, dest.name);
             }
 
-            // Возвращаем статус
             if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "СВОБОДЕН");
             
             await fetchData();
@@ -347,7 +314,6 @@ export default function DashboardPage() {
         }
     };
 
-    // --- СКАЧИВАНИЕ PDF (СЕРВЕРНАЯ ГЕНЕРАЦИЯ) ---
     const downloadBlob = (response: any, filename: string) => {
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
@@ -377,7 +343,6 @@ export default function DashboardPage() {
         } catch (error) { alert('Ошибка скачивания отчета'); }
     };
 
-    // --- ОБРАБОТЧИКИ ФОРМ И UI ---
     const handleTripVehicleChange = (vId: string) => {
         const v = vehicles.find((v) => v.id.toString() === vId);
         if (!v) return;
@@ -394,7 +359,6 @@ export default function DashboardPage() {
             switch (modalState.type) {
                 case 'add-destination':
                     await api.createDestination({ name: String(vals.name), latitude: Number(vals.lat), longitude: Number(vals.lon) });
-                    // Очистка состояний после сохранения
                     setDestLat('');
                     setDestLon('');
                     break;
@@ -460,20 +424,16 @@ export default function DashboardPage() {
         });
     }, [selectedVehicle, tripSortOrder]);
 
-    // Защита маршрута
     useEffect(() => {
         if (!isAuthLoading && !user) router.push('/');
     }, [user, isAuthLoading, router]);
 
-    // --- РЕНДЕРИНГ ---
     if (!isMounted || isAuthLoading) return <div className="flex items-center justify-center min-h-screen">Загрузка...</div>;
     if (!user) return null;
     if (isDataLoading) return <div className="flex items-center justify-center min-h-screen">Загрузка данных...</div>;
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
-            
-            {/* ШАПКА ПРОЕКТА */}
             <header className="px-8 py-4 flex justify-between items-center border-b bg-card sticky top-0 z-10">
                 <Link href="/">
                     <h1 className="text-2xl font-bold cursor-pointer">GoAnalytics</h1>
@@ -485,8 +445,6 @@ export default function DashboardPage() {
             </header>
 
             <motion.main className="p-8 space-y-8" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                
-                {/* --- ВЕРХНЯЯ ПАНЕЛЬ ОТЧЕТОВ --- */}
                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <h1 className="text-3xl font-bold">Аналитическая панель</h1>
                     <div className="flex space-x-2 flex-wrap gap-y-2">
@@ -513,7 +471,6 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* --- ТОП МЕТРИКИ (ДАННЫЕ С БЭКЕНДА) --- */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     <Card>
                         <CardHeader><CardTitle>Общий пробег (все ТС)</CardTitle></CardHeader>
@@ -531,7 +488,6 @@ export default function DashboardPage() {
 
                 <DashboardCharts data={analyticsData as any} selectedVehicleId={selectedVehicleId ? Number(selectedVehicleId) : null} vehicleCount={vehicles.length} />
 
-                {/* --- КАРТА И ЛЕНТА АЛЕРТОВ --- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <Card className="col-span-1 lg:col-span-2 flex flex-col h-[500px]">
                         <CardHeader className="flex flex-row justify-between items-center pb-2">
@@ -603,7 +559,6 @@ export default function DashboardPage() {
                     </Card>
                 </div>
 
-                {/* --- АНАЛИЗ ТС --- */}
                 <Card>
                     <CardHeader>
                         <div className="flex justify-between items-start">
@@ -621,7 +576,7 @@ export default function DashboardPage() {
                         <AnimatePresence mode="wait">
                             {selectedVehicle && analyticsData ? (
                                 <motion.div key={selectedVehicle.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    {/* Колонка 1 */}
+                                    
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg">
                                             {selectedVehicle.plateNumber}
@@ -675,7 +630,7 @@ export default function DashboardPage() {
                                         </div>
                                     </div>
 
-                                    {/* Колонка 2 */}
+                                    
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg">История ремонтов</h3>
                                         <div className="rounded-md border h-[300px] overflow-y-auto">
@@ -690,7 +645,7 @@ export default function DashboardPage() {
                                         </div>
                                     </div>
 
-                                    {/* Колонка 3 */}
+                                    
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg">История поездок</h3>
                                         <div className="rounded-md border h-[300px] overflow-y-auto">
@@ -718,7 +673,7 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                {/* --- СПРАВОЧНИКИ --- */}
+               
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Card>
                         <CardHeader className="flex flex-row justify-between items-center">
@@ -787,11 +742,6 @@ export default function DashboardPage() {
             </motion.main>
             <div className="fixed bottom-8 left-8 z-50"><ThemeToggle /></div>
 
-            {/* ========================================== */}
-            {/* МОДАЛЬНЫЕ ОКНА                             */}
-            {/* ========================================== */}
-
-            {/* Обновленная модалка: Добавление точки маршрута через карту */}
             <Dialog open={modalState.type === 'add-destination'} onOpenChange={() => { setModalState({ type: null }); setDestLat(''); setDestLon(''); }}>
                 <DialogContent className="sm:max-w-[600px]">
                     <form onSubmit={handleFormSubmit}>
@@ -802,7 +752,6 @@ export default function DashboardPage() {
                                 <Input name="name" className="col-span-3" placeholder='Склад "Восточный"' required />
                             </div>
                             
-                            {/* Интерактивная карта для выбора координат */}
                             <div className="col-span-4 h-[250px] rounded-md overflow-hidden border">
                                 <MapContainer center={[53.9045, 27.5615]} zoom={11} style={{ height: '100%', width: '100%' }}>
                                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />

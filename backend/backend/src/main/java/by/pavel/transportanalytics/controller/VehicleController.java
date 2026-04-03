@@ -20,8 +20,8 @@ import java.util.List;
 public class VehicleController {
 
     private final VehicleService vehicleService;
-    private final RepairServiceImpl repairService; // Используем реализацию
-    private final TripServiceImpl tripService;     // Используем реализацию
+    private final RepairServiceImpl repairService;
+    private final TripServiceImpl tripService;
 
     @GetMapping
     public ResponseEntity<List<VehicleDto>> getAllVehicles() {
@@ -68,7 +68,7 @@ public class VehicleController {
     @PostMapping("/{vehicleId}/trips")
     @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
     public ResponseEntity<TripDto> addTripToVehicle(@PathVariable Long vehicleId, @RequestBody TripDto tripDto) {
-        // Вызываем специальный метод из сервиса, который мы создали
+
         TripDto createdTrip = tripService.addTripToVehicle(vehicleId, tripDto);
         return new ResponseEntity<>(createdTrip, HttpStatus.CREATED);
     }

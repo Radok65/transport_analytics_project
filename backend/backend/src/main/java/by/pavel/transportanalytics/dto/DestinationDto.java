@@ -12,6 +12,6 @@ import lombok.NoArgsConstructor;
 public class DestinationDto {
     private Long id;
     private String name;
-    private Double latitude; // Для OSRM и карты фронтенда
+    private Double latitude;
     private Double longitude;
 }

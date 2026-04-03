@@ -18,8 +18,6 @@ public class DestinationService {
 
     private final DestinationRepository destinationRepository;
 
-    // Этот метод выполнится один раз при старте приложения.
-    // Если таблица пустая, он запишет в нее базовые точки.
     @PostConstruct
     public void initDefaultDestinations() {
         if (destinationRepository.count() == 0) {

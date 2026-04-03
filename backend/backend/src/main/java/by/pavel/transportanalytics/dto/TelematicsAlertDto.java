@@ -13,7 +13,7 @@ public class TelematicsAlertDto {
     private Long vehicleId;
     private String plateNumber;
     private LocalDateTime timestamp;
-    private String type; // "FUEL_DROP" или "SPEEDING"
+    private String type;
     private Double latitude;
     private Double longitude;
     private String description;

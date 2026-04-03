@@ -9,9 +9,6 @@ import java.util.Optional; // <-- Не забудь добавить этот и
 
 @Repository
 public interface TelematicsDataRepository extends JpaRepository<TelematicsData, Long> {
-    // Получить всю историю движения конкретного автомобиля, отсортированную по времени
     List<TelematicsData> findAllByVehicleIdOrderByTimestampDesc(Long vehicleId);
-
-    // ПОФИКСИЛИ ЗДЕСЬ: Добавили метод для получения последней (самой свежей) записи телематики для ТС
     Optional<TelematicsData> findTopByVehicleIdOrderByTimestampDesc(Long vehicleId);
 }

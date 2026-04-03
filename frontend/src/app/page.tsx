@@ -117,7 +117,6 @@ export default function HomePage() {
       </header>
 
       <main className="flex-grow flex flex-col items-center justify-center text-center p-8">
-        {/* 2. Анимация для заголовка */}
         <motion.h2
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -126,8 +125,7 @@ export default function HomePage() {
         >
           Управляйте вашим автопарком эффективно
         </motion.h2>
-        
-        {/* 3. Анимация для подзаголовка с задержкой */}
+
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -139,14 +137,12 @@ export default function HomePage() {
           Принимайте решения на основе данных.
         </motion.p>
 
-        {/* 4. Анимация для контейнера с карточками */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4 }}
           className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl w-full"
         >
-          {/* 5. Анимация при наведении на каждую карточку */}
           <motion.div whileHover={{ y: -5, transition: { duration: 0.2 } }}>
             <div className="p-6 bg-card rounded-lg border h-full">
               <h3 className="text-xl font-semibold mb-2">Аналитика в реальном времени</h3>

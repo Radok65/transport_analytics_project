@@ -65,8 +65,6 @@ public class TelematicsService {
         vehicleRepository.save(vehicle);
 
         checkForSpeeding(vehicle, newData);
-
-        // IDEA Warning FIX: Используем функциональный стиль
         lastDataOpt.ifPresent(lastData -> checkForFuelDrop(vehicle, lastData, newData));
     }
 
@@ -79,7 +77,6 @@ public class TelematicsService {
             alert.setTimestamp(LocalDateTime.now());
             alert.setType("SPEEDING");
             alert.setDescription("Превышение скорости: " + data.getSpeed() + " км/ч. Место: " + address);
-            // FIX: Преобразуем double в BigDecimal
             alert.setFinancialLoss(BigDecimal.ZERO);
 
             alertRepository.save(alert);
@@ -92,9 +89,9 @@ public class TelematicsService {
             TelematicsAlert alert = new TelematicsAlert();
             alert.setVehicle(vehicle);
             alert.setTimestamp(LocalDateTime.now());
-            alert.setType("ARRIVAL"); // Новый тип события
+            alert.setType("ARRIVAL");
             alert.setDescription("Транспорт успешно прибыл в пункт назначения: " + destinationName);
-            alert.setFinancialLoss(BigDecimal.ZERO); // Потерь нет
+            alert.setFinancialLoss(BigDecimal.ZERO);
 
             alertRepository.save(alert);
         }
@@ -103,8 +100,6 @@ public class TelematicsService {
         if (lastData.getFuelLevel() == null || newData.getFuelLevel() == null) {
             return;
         }
-
-        // Защита от ложных срабатываний: если скорость > 5, то падение топлива - это норма
         if (newData.getSpeed() != null && newData.getSpeed() > 5.0) {
             return;
         }
@@ -120,7 +115,6 @@ public class TelematicsService {
             alert.setTimestamp(LocalDateTime.now());
             alert.setType("FUEL_DROP");
             alert.setDescription(String.format("Резкое падение топлива: -%.1f л. Место: %s", drop, address));
-            // FIX: Преобразуем double в BigDecimal
             alert.setFinancialLoss(BigDecimal.valueOf(lossAmount));
 
             alertRepository.save(alert);

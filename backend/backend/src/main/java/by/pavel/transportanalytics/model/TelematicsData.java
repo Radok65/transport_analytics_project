@@ -20,7 +20,6 @@ public class TelematicsData {
     @JoinColumn(name = "vehicle_id", nullable = false)
     private Vehicle vehicle;
 
-    // Привязываем точку к поездке (может быть null, если машина просто заведена на базе)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trip_id")
     private Trip trip;
@@ -37,11 +36,10 @@ public class TelematicsData {
     private Double speed;
 
     @Column(name = "fuel_level", nullable = false)
-    private Double fuelLevel; // Текущий уровень топлива в баке в литрах
+    private Double fuelLevel;
 
-    // --- Данные от OpenWeatherMap API ---
     @Column(name = "weather_condition")
-    private String weatherCondition; // Например: "Rain", "Snow", "Clear"
+    private String weatherCondition;
 
-    private Double temperature; // Температура воздуха
+    private Double temperature; 
 }

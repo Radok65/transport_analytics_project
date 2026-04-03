@@ -44,7 +44,7 @@ public class SimulationService {
         double destLon = destination.getLongitude() + (Math.random() - 0.5) * 0.0015;
 
         List<double[]> rawRoutePoints = new ArrayList<>();
-        double actualDistanceKm; // Инициализация 0.0 больше не нужна
+        double actualDistanceKm;
 
         try {
             String osrmUrl = String.format(Locale.US,
@@ -71,7 +71,6 @@ public class SimulationService {
         double weatherMultiplier = 1.0;
         try {
             String weatherUrl = String.format(Locale.US, "http://localhost:8080/api/weather?lat=%f&lon=%f", startLat, startLon);
-            // Избавились от Map.class, используем безопасный парсинг JSON
             String weatherResponse = restTemplate.getForObject(weatherUrl, String.class);
             if (weatherResponse != null) {
                 JsonNode weatherNode = objectMapper.readTree(weatherResponse);
@@ -88,8 +87,6 @@ public class SimulationService {
         } catch (Exception e) {
             log.warn("Не удалось получить погоду, используем стандартный расход.");
         }
-
-        // Избавились от лишнего unboxing'а
         double fuelNorm = vehicle.getFuelNorm() != null ? vehicle.getFuelNorm().doubleValue() : 0.0;
         double fuelNeeded = ((actualDistanceKm / 100) * fuelNorm) * weatherMultiplier;
         double currentFuel = vehicle.getCurrentFuelLevel() != null ? vehicle.getCurrentFuelLevel() : 0.0;
@@ -107,8 +104,6 @@ public class SimulationService {
                     .pathPoints(Collections.emptyList())
                     .build();
         }
-
-        // Убрали передачу frames, используем константу напрямую
         List<double[]> interpolatedPath = interpolatePath(rawRoutePoints);
 
         return SimulationResponseDto.builder()
@@ -149,7 +144,6 @@ public class SimulationService {
         }
 
         double stepDist = totalDist / SIMULATION_FRAMES;
-        // Используем getFirst()
         pathPoints.add(routePoints.getFirst());
 
         for (int i = 1; i < SIMULATION_FRAMES; i++) {
@@ -167,10 +161,8 @@ public class SimulationService {
                 }
                 currentDist += seg[4];
             }
-            // Используем getLast()
             if (!found) pathPoints.add(routePoints.getLast());
         }
-        // Используем getLast()
         pathPoints.add(routePoints.getLast());
 
         return pathPoints;
