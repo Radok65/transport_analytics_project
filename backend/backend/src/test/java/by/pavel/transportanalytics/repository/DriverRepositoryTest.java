@@ -5,7 +5,6 @@ import by.pavel.transportanalytics.model.Vehicle;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -14,7 +13,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
-@ActiveProfiles("test")
 class DriverRepositoryTest {
 
     @Autowired
@@ -24,30 +22,23 @@ class DriverRepositoryTest {
     private VehicleRepository vehicleRepository;
 
     @Test
-    void findByAssignedVehicleId_ShouldReturnDriver() {
-        // Arrange
+    void findByAssignedVehicleId_ReturnsDriver() {
         Vehicle vehicle = new Vehicle();
-        vehicle.setPlateNumber("AA-1234");
-        vehicle.setModel("Test Model");
-        // Теперь это поле мапится на "manufacture_year", но в Java сеттер тот же
-        vehicle.setYear(2023);
-        vehicle.setFuelNorm(BigDecimal.TEN);
-
-        // Сначала сохраняем машину, чтобы у нее появился ID
-        vehicle = vehicleRepository.save(vehicle);
+        vehicle.setPlateNumber("1234AB");
+        vehicle.setModel("Kamaz");
+        vehicle.setYear(2019);
+        vehicle.setFuelNorm(BigDecimal.valueOf(20.0));
+        vehicle.setStatus("АКТИВЕН");
+        Vehicle savedVehicle = vehicleRepository.save(vehicle);
 
         Driver driver = new Driver();
-        driver.setFullName("Ivan Ivanov");
-        // Важно: Привязываем уже сохраненную машину
-        driver.setAssignedVehicle(vehicle);
+        driver.setFullName("Иван Иванов");
+        driver.setAssignedVehicle(savedVehicle);
         driverRepository.save(driver);
 
-        // Act
-        Optional<Driver> found = driverRepository.findByAssignedVehicleId(vehicle.getId());
+        Optional<Driver> found = driverRepository.findByAssignedVehicleId(savedVehicle.getId());
 
-        // Assert
         assertTrue(found.isPresent());
-        // Используйте assertEquals для строк
-        assertEquals("Ivan Ivanov", found.get().getFullName());
+        assertEquals("Иван Иванов", found.get().getFullName());
     }
 }

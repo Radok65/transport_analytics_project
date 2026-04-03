@@ -134,7 +134,6 @@ public class AnalyticsService {
             BigDecimal totalFuelUsed = trips.stream().map(Trip::getFuelUsed).reduce(BigDecimal.ZERO, BigDecimal::add);
             avgFuelConsumption = totalFuelUsed.doubleValue() / totalDistance * 100;
 
-            // Исправлено: правильное сравнение и деление для BigDecimal
             if (vehicle.getFuelNorm() != null && vehicle.getFuelNorm().compareTo(BigDecimal.ZERO) > 0) {
                 fuelNormDeviation = (avgFuelConsumption / vehicle.getFuelNorm().doubleValue() - 1) * 100;
             }
