@@ -1,0 +1,15 @@
+UPDATE public.drivers SET full_name = 'Смирнов Алексей Иванович' WHERE id = 1;
+UPDATE public.drivers SET full_name = 'Иванов Борис Сергеевич' WHERE id = 2;
+UPDATE public.drivers SET full_name = 'Петров Виктор Александрович' WHERE id = 3;
+UPDATE public.drivers SET full_name = 'Сидоров Геннадий Петрович' WHERE id = 4;
+UPDATE public.drivers SET full_name = 'Соколов Дмитрий Николаевич' WHERE id = 5;
+UPDATE public.drivers SET full_name = 'Попов Евгений Владимирович' WHERE id = 6;
+UPDATE public.drivers SET full_name = 'Лебедев Жан Эдуардович' WHERE id = 7;
+UPDATE public.drivers SET full_name = 'Козлов Захар Ильич' WHERE id = 8;
+UPDATE public.drivers SET full_name = 'Новиков Илья Андреевич' WHERE id = 9;
+UPDATE public.drivers SET full_name = 'Морозов Кирилл Степанович' WHERE id = 10;
+UPDATE public.drivers SET full_name = 'Волков Леонид Борисович' WHERE id = 11;
+UPDATE public.drivers SET full_name = 'Алексеев Максим Григорьевич' WHERE id = 12;
+UPDATE public.drivers SET full_name = 'Павлов Николай Васильевич' WHERE id = 13;
+UPDATE public.drivers SET full_name = 'Богданов Олег Романович' WHERE id = 14;
+UPDATE public.drivers SET full_name = 'Шильцев Павел Дмитриевич' WHERE id = 15;
