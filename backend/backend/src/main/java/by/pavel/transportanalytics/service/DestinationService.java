@@ -5,6 +5,8 @@ import by.pavel.transportanalytics.model.Destination;
 import by.pavel.transportanalytics.repository.DestinationRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict; // <-- Добавлен импорт
+import org.springframework.cache.annotation.Cacheable; // <-- Добавлен импорт
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,7 @@ public class DestinationService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "destinations")
     public List<DestinationDto> getAllDestinations() {
         return destinationRepository.findAll().stream()
                 .map(d -> DestinationDto.builder()
@@ -54,6 +57,7 @@ public class DestinationService {
     }
 
     @Transactional
+    @CacheEvict(value = "destinations", allEntries = true)
     public DestinationDto createDestination(DestinationDto dto) {
         Destination destination = Destination.builder()
                 .name(dto.getName())

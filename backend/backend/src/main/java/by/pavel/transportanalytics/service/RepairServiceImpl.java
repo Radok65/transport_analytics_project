@@ -7,6 +7,7 @@ import by.pavel.transportanalytics.repository.RepairRepository;
 import by.pavel.transportanalytics.repository.VehicleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict; // <-- Добавлен импорт
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ public class RepairServiceImpl implements RepairService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public RepairDto addRepairToVehicle(Long vehicleId, RepairDto repairDto) {
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new EntityNotFoundException("Vehicle with id " + vehicleId + " not found"));
@@ -38,6 +40,7 @@ public class RepairServiceImpl implements RepairService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public RepairDto updateRepair(Long repairId, RepairDto repairDto) {
         Repair existingRepair = repairRepository.findById(repairId)
                 .orElseThrow(() -> new EntityNotFoundException("Repair with id " + repairId + " not found"));
@@ -52,6 +55,7 @@ public class RepairServiceImpl implements RepairService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public void deleteRepair(Long repairId) {
         if (!repairRepository.existsById(repairId)) {
             throw new EntityNotFoundException("Repair with id " + repairId + " not found");

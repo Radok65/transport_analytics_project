@@ -5,11 +5,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable; // <-- Добавлен импорт
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DestinationDto {
+public class DestinationDto implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private Long id;
     private String name;
     private Double latitude;

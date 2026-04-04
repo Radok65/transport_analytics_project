@@ -2,13 +2,16 @@ package by.pavel.transportanalytics.repository;
 
 import by.pavel.transportanalytics.model.TelematicsData;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
-import java.util.Optional; // <-- Не забудь добавить этот импорт
+import java.util.Optional;
 
-@Repository
 public interface TelematicsDataRepository extends JpaRepository<TelematicsData, Long> {
-    List<TelematicsData> findAllByVehicleIdOrderByTimestampDesc(Long vehicleId);
+
+    @Query("SELECT d FROM TelematicsData d JOIN FETCH d.vehicle LEFT JOIN FETCH d.trip WHERE d.vehicle.id = :vehicleId ORDER BY d.timestamp DESC")
+    List<TelematicsData> findAllByVehicleIdWithVehicleAndTripOrderByTimestampDesc(@Param("vehicleId") Long vehicleId);
+
     Optional<TelematicsData> findTopByVehicleIdOrderByTimestampDesc(Long vehicleId);
 }

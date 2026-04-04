@@ -8,7 +8,6 @@ import by.pavel.transportanalytics.repository.TelematicsAlertRepository;
 import by.pavel.transportanalytics.repository.TelematicsDataRepository;
 import by.pavel.transportanalytics.service.TelematicsService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,7 +31,8 @@ public class TelematicsController {
 
     @GetMapping("/vehicle/{vehicleId}/history")
     public ResponseEntity<List<TelematicsDataDto>> getVehicleHistory(@PathVariable Long vehicleId) {
-        List<TelematicsData> history = dataRepository.findAllByVehicleIdOrderByTimestampDesc(vehicleId);
+        List<TelematicsData> history = dataRepository.findAllByVehicleIdWithVehicleAndTripOrderByTimestampDesc(vehicleId);
+
         List<TelematicsDataDto> dtoList = history.stream().map(data -> TelematicsDataDto.builder()
                 .vehicleId(data.getVehicle().getId())
                 .plateNumber(data.getVehicle().getPlateNumber())
@@ -51,7 +51,9 @@ public class TelematicsController {
 
     @GetMapping("/alerts")
     public ResponseEntity<List<TelematicsAlertDto>> getAllAlerts() {
-        List<TelematicsAlert> alerts = alertRepository.findAll(Sort.by(Sort.Direction.DESC, "timestamp"));
+
+        List<TelematicsAlert> alerts = alertRepository.findAllWithVehicleOrderByTimestampDesc();
+
         List<TelematicsAlertDto> dtoList = alerts.stream().map(alert -> TelematicsAlertDto.builder()
                 .id(alert.getId())
                 .vehicleId(alert.getVehicle().getId())
@@ -74,5 +76,4 @@ public class TelematicsController {
         telematicsService.createArrivalAlert(vehicleId, destinationName);
         return ResponseEntity.ok("Уведомление о прибытии добавлено в ленту");
     }
-
 }

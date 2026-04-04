@@ -22,4 +22,13 @@ public class User {
 
     @Column(nullable = false)
     private String role;
+
+    @Column(name = "provider")
+    private String provider;
+
+    @Column(name = "provider_id")
+    private String providerId;
+
+    @Column(name = "avatar_url")
+    private String avatarUrl;
 }

@@ -9,11 +9,9 @@ import by.pavel.transportanalytics.repository.TripRepository;
 import by.pavel.transportanalytics.repository.VehicleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict; // <-- Добавлен импорт
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +28,7 @@ public class TripServiceImpl implements TripService {
     }
 
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public TripDto addTripToVehicle(Long vehicleId, TripDto tripDto) {
         Vehicle vehicle = vehicleRepository.findById(vehicleId)
                 .orElseThrow(() -> new EntityNotFoundException("Vehicle with id " + vehicleId + " not found"));
@@ -45,6 +44,7 @@ public class TripServiceImpl implements TripService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public TripDto updateTrip(Long tripId, TripDto tripDto) {
         Trip existingTrip = tripRepository.findById(tripId)
                 .orElseThrow(() -> new EntityNotFoundException("Trip with id " + tripId + " not found"));
@@ -64,6 +64,7 @@ public class TripServiceImpl implements TripService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public void deleteTrip(Long tripId) {
         if (!tripRepository.existsById(tripId)) {
             throw new EntityNotFoundException("Trip with id " + tripId + " not found");
