@@ -8,6 +8,8 @@ import by.pavel.transportanalytics.repository.DriverRepository;
 import by.pavel.transportanalytics.repository.VehicleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict; // <-- Добавлен импорт
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "vehicles")
     public List<VehicleDto> findAllVehicles() {
         return vehicleRepository.findAll().stream()
                 .map(this::convertToDto)
@@ -39,6 +42,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public VehicleDto createVehicle(VehicleDto vehicleDto) {
         Vehicle vehicle = convertToEntity(vehicleDto);
         Vehicle savedVehicle = vehicleRepository.save(vehicle);
@@ -47,6 +51,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public VehicleDto updateVehicle(Long id, VehicleDto vehicleDto) {
         Vehicle existingVehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Vehicle with id " + id + " not found"));
@@ -62,6 +67,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public void deleteVehicle(Long id) {
         Vehicle vehicleToDelete = vehicleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Vehicle with id " + id + " not found"));
@@ -73,14 +79,17 @@ public class VehicleServiceImpl implements VehicleService {
 
         vehicleRepository.delete(vehicleToDelete);
     }
+
     @Override
     @Transactional
+    @CacheEvict(value = "vehicles", allEntries = true)
     public void updateVehicleStatus(Long id, String status) {
         Vehicle vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("ТС не найдено"));
         vehicle.setStatus(status);
         vehicleRepository.save(vehicle);
     }
+
     private VehicleDto convertToDto(Vehicle vehicle) {
         VehicleDto dto = new VehicleDto();
         dto.setId(vehicle.getId());
@@ -129,4 +138,3 @@ public class VehicleServiceImpl implements VehicleService {
         return vehicle;
     }
 }
-

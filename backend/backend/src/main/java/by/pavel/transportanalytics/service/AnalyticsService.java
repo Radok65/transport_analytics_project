@@ -1,17 +1,13 @@
 package by.pavel.transportanalytics.service;
 
 import by.pavel.transportanalytics.dto.AnalyticsDto;
-import by.pavel.transportanalytics.model.Repair;
+import by.pavel.transportanalytics.dto.RepairDto;
+import by.pavel.transportanalytics.dto.TripDto;
+import by.pavel.transportanalytics.dto.VehicleDto;
 import by.pavel.transportanalytics.model.TelematicsAlert;
-import by.pavel.transportanalytics.model.Trip;
-import by.pavel.transportanalytics.model.Vehicle;
-import by.pavel.transportanalytics.repository.RepairRepository;
 import by.pavel.transportanalytics.repository.TelematicsAlertRepository;
-import by.pavel.transportanalytics.repository.TripRepository;
-import by.pavel.transportanalytics.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -23,23 +19,29 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AnalyticsService {
 
-    private final VehicleRepository vehicleRepository;
-    private final TripRepository tripRepository;
-    private final RepairRepository repairRepository;
+    // Оставляем только VehicleService (для кэша) и Alerts (для реального времени)
+    private final VehicleService vehicleService;
     private final TelematicsAlertRepository telematicsAlertRepository;
 
     private static final BigDecimal FUEL_PRICE = new BigDecimal("2.57");
 
-    @Transactional(readOnly = true)
     public AnalyticsDto getGlobalAnalytics() {
-        List<Vehicle> vehicles = vehicleRepository.findAll();
-        List<Trip> allTrips = tripRepository.findAll();
-        List<Repair> allRepairs = repairRepository.findAll();
+
+        List<VehicleDto> vehicles = vehicleService.findAllVehicles();
+
+        List<TripDto> allTrips = vehicles.stream()
+                .flatMap(v -> v.getTrips().stream())
+                .collect(Collectors.toList());
+
+        List<RepairDto> allRepairs = vehicles.stream()
+                .flatMap(v -> v.getRepairs().stream())
+                .collect(Collectors.toList());
+
         List<TelematicsAlert> allAlerts = telematicsAlertRepository.findAll();
 
         Map<String, Integer> top5 = vehicles.stream()
                 .collect(Collectors.toMap(
-                        Vehicle::getPlateNumber,
+                        VehicleDto::getPlateNumber,
                         v -> v.getTrips().stream()
                                 .mapToInt(t -> t.getMileageEnd() - t.getMileageStart())
                                 .sum()
@@ -56,7 +58,7 @@ public class AnalyticsService {
         BigDecimal totalFleetCost = totalFuel.add(totalRepairs).add(totalTelematicsLoss);
 
         int totalFleetMileage = vehicles.stream()
-                .mapToInt(v -> v.getTrips().stream().mapToInt(Trip::getMileageEnd).max().orElse(0))
+                .mapToInt(v -> v.getTrips().stream().mapToInt(TripDto::getMileageEnd).max().orElse(0))
                 .sum();
 
         LocalDate now = LocalDate.now();
@@ -83,21 +85,25 @@ public class AnalyticsService {
                 .build();
     }
 
-    @Transactional(readOnly = true)
     public AnalyticsDto getVehicleAnalytics(Long vehicleId) {
         AnalyticsDto dto = getGlobalAnalytics();
 
-        Vehicle vehicle = vehicleRepository.findById(vehicleId).orElse(null);
+        VehicleDto vehicle = vehicleService.findAllVehicles().stream()
+                .filter(v -> v.getId().equals(vehicleId))
+                .findFirst()
+                .orElse(null);
+
         if (vehicle == null) return dto;
 
-        List<Trip> trips = vehicle.getTrips();
-        List<Repair> repairs = vehicle.getRepairs();
+        List<TripDto> trips = vehicle.getTrips();
+        List<RepairDto> repairs = vehicle.getRepairs();
         List<TelematicsAlert> vehicleAlerts = telematicsAlertRepository.findAll().stream()
                 .filter(a -> a.getVehicle() != null && a.getVehicle().getId().equals(vehicleId))
                 .toList();
 
         List<AnalyticsDto.TripEfficiencyPoint> trend = trips.stream()
-                .sorted(Comparator.comparing(Trip::getDate))
+                .filter(t -> t.getDate() != null)
+                .sorted(Comparator.comparing(TripDto::getDate))
                 .map(t -> {
                     int distance = t.getMileageEnd() - t.getMileageStart();
                     if (distance <= 0) return null;
@@ -119,7 +125,7 @@ public class AnalyticsService {
         BigDecimal vehLoss = calculateAlertLoss(vehicleAlerts);
 
         int totalDistance = trips.stream().mapToInt(t -> t.getMileageEnd() - t.getMileageStart()).sum();
-        int maxMileage = trips.stream().mapToInt(Trip::getMileageEnd).max().orElse(0);
+        int maxMileage = trips.stream().mapToInt(TripDto::getMileageEnd).max().orElse(0);
 
         BigDecimal costPerKm = BigDecimal.ZERO;
         if (totalDistance > 0) {
@@ -131,7 +137,7 @@ public class AnalyticsService {
         double fuelNormDeviation = 0.0;
 
         if (totalDistance > 0) {
-            BigDecimal totalFuelUsed = trips.stream().map(Trip::getFuelUsed).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totalFuelUsed = trips.stream().map(TripDto::getFuelUsed).reduce(BigDecimal.ZERO, BigDecimal::add);
             avgFuelConsumption = totalFuelUsed.doubleValue() / totalDistance * 100;
 
             if (vehicle.getFuelNorm() != null && vehicle.getFuelNorm().compareTo(BigDecimal.ZERO) > 0) {
@@ -156,7 +162,7 @@ public class AnalyticsService {
         return dto;
     }
 
-    private AnalyticsDto.VehiclePerformancePoint calculatePerformancePoint(Vehicle vehicle, List<TelematicsAlert> allAlerts) {
+    private AnalyticsDto.VehiclePerformancePoint calculatePerformancePoint(VehicleDto vehicle, List<TelematicsAlert> allAlerts) {
         int totalDistance = vehicle.getTrips().stream()
                 .mapToInt(t -> t.getMileageEnd() - t.getMileageStart())
                 .sum();
@@ -182,21 +188,20 @@ public class AnalyticsService {
                 .build();
     }
 
-    private BigDecimal calculateFuelCost(List<Trip> trips) {
+    private BigDecimal calculateFuelCost(List<TripDto> trips) {
         return trips.stream()
-                .map(Trip::getFuelUsed)
+                .map(TripDto::getFuelUsed)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .multiply(FUEL_PRICE);
     }
 
-    private BigDecimal calculateRepairCost(List<Repair> repairs) {
+    private BigDecimal calculateRepairCost(List<RepairDto> repairs) {
         return repairs.stream()
-                .map(Repair::getCost)
+                .map(RepairDto::getCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal calculateAlertLoss(List<TelematicsAlert> alerts) {
-        // Исправлено: поменяли местами filter и map
         return alerts.stream()
                 .map(TelematicsAlert::getFinancialLoss)
                 .filter(Objects::nonNull)

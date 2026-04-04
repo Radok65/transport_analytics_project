@@ -1,11 +1,13 @@
 package by.pavel.transportanalytics.dto;
 
 import lombok.Data;
+
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.List;
 
 @Data
-public class VehicleDto {
+public class VehicleDto implements Serializable {
     private Long id;
     private String plateNumber;
     private String model;

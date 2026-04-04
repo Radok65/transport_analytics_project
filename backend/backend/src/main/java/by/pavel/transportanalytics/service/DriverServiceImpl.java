@@ -8,6 +8,8 @@ import by.pavel.transportanalytics.repository.TripRepository;
 import by.pavel.transportanalytics.repository.VehicleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict; // <-- Добавлен импорт
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ public class DriverServiceImpl implements DriverService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "drivers")
     public List<DriverDto> findAllDrivers() {
         return driverRepository.findAll().stream()
                 .map(this::convertToDto)
@@ -33,6 +36,7 @@ public class DriverServiceImpl implements DriverService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "drivers", allEntries = true)
     public DriverDto createDriver(DriverDto driverDto) {
         Driver driver = new Driver();
         driver.setFullName(driverDto.getFullName());
@@ -53,6 +57,7 @@ public class DriverServiceImpl implements DriverService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "drivers", allEntries = true)
     public DriverDto updateDriver(Long id, DriverDto driverDto) {
         Driver driverToUpdate = driverRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Driver with id " + id + " not found"));
@@ -79,6 +84,7 @@ public class DriverServiceImpl implements DriverService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "drivers", allEntries = true)
     public void deleteDriver(Long id) {
         if (!tripRepository.findAllByDriverId(id).isEmpty()) {
             throw new IllegalStateException("Нельзя удалить водителя, так как за ним числятся поездки. Удаление нарушит целостность истории.");
