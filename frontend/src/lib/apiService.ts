@@ -67,7 +67,6 @@ export interface TripEfficiencyPoint {
 }
 
 export interface AnalyticsData {
-
     top5VehiclesByMileage: Record<string, number>;
     totalFuelCost: number;
     totalRepairCost: number;
@@ -124,6 +123,10 @@ export const api = {
 
     downloadSummaryReport: () => apiClient.get('/reports/summary', { responseType: 'blob' }),
     downloadVehicleReport: (id: string) => apiClient.get(`/reports/vehicle/${id}`, { responseType: 'blob' }),
+    
+    // Явно добавляем функции пользователя
+    getCurrentUser: () => apiClient.get('/auth/me'),
+    logoutUser: () => apiClient.post('/auth/logout'),
 };
 
 export default api;
