@@ -8,6 +8,8 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+import { useStore } from '@/store/useStore';
+
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -84,15 +86,13 @@ export default function DashboardPage() {
     const router = useRouter();
 
     const [isMounted, setIsMounted] = useState(false);
-    const [isDataLoading, setIsDataLoading] = useState(true);
+
+    const { 
+        vehicles, drivers, destinations, alerts, analyticsData, isDataLoading,
+        fetchAll, fetchBaseData, fetchAnalytics, setVehicles
+    } = useStore();
 
     const activeVehicleIdRef = useRef<string | null>(null);
-
-    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-    const [drivers, setDrivers] = useState<Driver[]>([]);
-    const [destinations, setDestinations] = useState<Destination[]>([]);
-    const [alerts, setAlerts] = useState<TelematicsAlertDto[]>([]);
-    const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
     const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(null);
 
     const [modalState, setModalState] = useState<{ type: ModalType | null; data?: ModalData }>({ type: null });
@@ -112,63 +112,29 @@ export default function DashboardPage() {
         driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '',
     });
 
-    const fetchBaseData = async () => {
-        try {
-            const [vRes, dRes, destRes, aRes] = await Promise.all([
-                api.getVehicles(),
-                api.getDrivers(),
-                api.getDestinations(),
-                api.getAlerts()
-            ]);
-            setVehicles(vRes.data);
-            setDrivers(dRes.data);
-            setDestinations(destRes.data);
-            setAlerts(aRes.data);
-            if (vRes.data.length === 0) setSelectedVehicleId(null);
-        } catch (error) {
-            console.error('Ошибка при загрузке базовых данных:', error);
-        }
-    };
-
-    const fetchAnalytics = async (vId: string | null) => {
-        try {
-            const res = await api.getAnalytics(vId);
-            setAnalyticsData(res.data);
-        } catch (error) {
-            console.error('Ошибка аналитики:', error);
-        }
-    };
-
-    const fetchData = async () => {
-        await Promise.all([fetchBaseData(), fetchAnalytics(activeVehicleIdRef.current)]);
-        setIsDataLoading(false);
-    };
-
     useEffect(() => {
         setIsMounted(true);
         if (user) {
-            if (vehicles.length === 0) setIsDataLoading(true);
-            fetchData();
+            if (vehicles.length === 0) useStore.setState({ isDataLoading: true });
+            fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
         }
-
-    }, [user]);
+    }, [user, fetchAll, vehicles.length]);
 
     useEffect(() => {
         activeVehicleIdRef.current = selectedVehicleId;
         if (user && !isDataLoading) fetchAnalytics(selectedVehicleId);
-
-    }, [selectedVehicleId]);
+    }, [selectedVehicleId, user, isDataLoading, fetchAnalytics]);
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (user && isMounted) {
             interval = setInterval(() => {
-                fetchData();
+                fetchBaseData(setSelectedVehicleId);
+                fetchAnalytics(activeVehicleIdRef.current);
             }, 5000);
         }
         return () => clearInterval(interval);
-
-    }, [user, isMounted]);
+    }, [user, isMounted, fetchBaseData, fetchAnalytics]);
 
     const selectedVehicle = useMemo(() => vehicles.find((v) => v.id.toString() === selectedVehicleId), [vehicles, selectedVehicleId]);
     const currentDriver = useMemo(() => drivers.find((d) => d.assignedVehicleId === Number(selectedVehicleId)), [drivers, selectedVehicleId]);
@@ -206,7 +172,7 @@ export default function DashboardPage() {
                 vehicleId, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615,
                 speed: 0, fuelLevel: Math.max(0, (vehicle.currentFuelLevel || 50) - 15),
             });
-            await fetchData();
+            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
         } catch (error) { console.error(error); }
     };
 
@@ -218,7 +184,7 @@ export default function DashboardPage() {
                 vehicleId, latitude: (vehicle.lastLatitude || 53.9045) + 0.005, longitude: vehicle.lastLongitude || 27.5615,
                 speed: 110, fuelLevel: vehicle.currentFuelLevel || 50,
             });
-            await fetchData();
+            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
         } catch (error) { console.error(error); }
     };
 
@@ -232,7 +198,7 @@ export default function DashboardPage() {
                 vehicleId: vehicle.id, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615,
                 speed: 0, fuelLevel: newFuel,
             });
-            await fetchData();
+            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
             setModalState({ type: null });
             setRefuelData({ vehicleId: '', amount: '' });
         } catch (error) { alert('Ошибка при заправке ТС'); }
@@ -260,7 +226,7 @@ export default function DashboardPage() {
             if (api.updateVehicleStatus) {
                 await api.updateVehicleStatus(vehicleId, "В ПУТИ");
             }
-            await fetchData(); 
+            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId); 
 
             const frames = data.pathPoints.length;
             const stepFuel = data.fuelNeeded / frames;
@@ -300,13 +266,13 @@ export default function DashboardPage() {
 
             if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "СВОБОДЕН");
             
-            await fetchData();
+            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
             setActiveRouteCoords([]);
             setSimulatedVehicleRouteId(null);
         } catch (err) {
             console.error(err);
             if (api.updateVehicleStatus) {
-                try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); await fetchData(); } catch(e){}
+                try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId); } catch(e){}
             }
             setActiveRouteCoords([]);
             setSimulatedVehicleRouteId(null);
@@ -396,7 +362,7 @@ export default function DashboardPage() {
                     break;
             }
             setModalState({ type: null });
-            fetchData();
+            fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
         } catch (err) { alert('Ошибка при сохранении данных.'); }
     };
 
@@ -410,7 +376,7 @@ export default function DashboardPage() {
                 await api.deleteDriver(modalState.data.id);
             }
             setModalState({ type: null });
-            fetchData();
+            fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
         } catch (err) { alert('Ошибка удаления. Возможно, объект связан с другими данными.'); }
     };
 
@@ -439,7 +405,19 @@ export default function DashboardPage() {
                     <h1 className="text-2xl font-bold cursor-pointer">GoAnalytics</h1>
                 </Link>
                 <div className="flex items-center space-x-4">
-                    <span className="font-medium">{user.username}</span>
+                    <div className="flex items-center gap-3">
+                        {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="Аватар" className="w-10 h-10 rounded-full border border-gray-200" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                                {user.username.charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                        <div className="flex flex-col">
+                            <span className="font-semibold text-gray-800 leading-none">{user.username}</span>
+                            <span className="text-xs text-gray-500 mt-1">{user.role}</span>
+                        </div>
+                    </div>
                     <Button onClick={() => { logout(); router.push('/'); }}>Выход</Button>
                 </div>
             </header>
@@ -502,7 +480,7 @@ export default function DashboardPage() {
                                         {currentWeather.temperature > 0 ? '+' : ''}{currentWeather.temperature.toFixed(1)}°C
                                     </div>
                                 )}
-                                {user?.roles.includes('ROLE_ADMIN') && (
+                                {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
                                     <div className="flex space-x-2">
                                         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                             <Button variant="outline" onClick={() => setModalState({ type: 'add-destination' })}>
@@ -599,7 +577,7 @@ export default function DashboardPage() {
                                                         <span className="font-mono text-sm mt-1 text-center">{selectedVehicle.lastLatitude?.toFixed(4) || 'N/A'}<br />{selectedVehicle.lastLongitude?.toFixed(4) || 'N/A'}</span>
                                                     </div>
                                                 </div>
-                                                {user?.roles.includes('ROLE_ADMIN') && selectedVehicle.status !== 'В ПУТИ' && (
+                                                {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && selectedVehicle.status !== 'В ПУТИ' && (
                                                     <div className="grid grid-cols-2 gap-2 mt-4">
                                                         <Button variant="outline" size="sm" onClick={() => handleSimulateSpeeding(selectedVehicle.id)}><FastForward className="mr-2 h-4 w-4 text-orange-500" />Скорость</Button>
                                                         <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => handleSimulateDrain(selectedVehicle.id)}><AlertTriangle className="mr-2 h-4 w-4" />Слив</Button>
@@ -622,7 +600,7 @@ export default function DashboardPage() {
                                         <div className="pt-4">
                                             <div className="flex justify-between items-center">
                                                 <h4 className="font-semibold mb-2">Текущий водитель</h4>
-                                                {user?.roles.includes('ROLE_ADMIN') && (
+                                                {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
                                                     <Button variant="outline" size="sm" onClick={() => setModalState({ type: 'assign-driver', data: selectedVehicle })}><UserCheck className="mr-2 h-4 w-4" />Назначить</Button>
                                                 )}
                                             </div>
@@ -678,17 +656,17 @@ export default function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row justify-between items-center">
                             <CardTitle>Транспортные средства</CardTitle>
-                            {user?.roles.includes('ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-vehicle' })}><PlusCircle className="mr-2 h-4 w-4" /> Добавить</Button>}
+                            {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-vehicle' })}><PlusCircle className="mr-2 h-4 w-4" /> Добавить</Button>}
                         </CardHeader>
                         <CardContent>
                             <div className="rounded-md border h-[300px] overflow-y-auto">
                                 <Table>
-                                    <TableHeader><TableRow><TableHead>Гос. номер</TableHead><TableHead>Модель</TableHead>{user?.roles.includes('ROLE_ADMIN') && <TableHead className="text-right">Действия</TableHead>}</TableRow></TableHeader>
+                                    <TableHeader><TableRow><TableHead>Гос. номер</TableHead><TableHead>Модель</TableHead>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <TableHead className="text-right">Действия</TableHead>}</TableRow></TableHeader>
                                     <TableBody>
                                         {vehicles.map((v) => (
                                             <TableRow key={v.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedVehicleId(String(v.id))}>
                                                 <TableCell>{v.plateNumber}</TableCell><TableCell>{v.model}</TableCell>
-                                                {user?.roles.includes('ROLE_ADMIN') && (
+                                                {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
                                                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -710,17 +688,17 @@ export default function DashboardPage() {
                     <Card>
                         <CardHeader className="flex flex-row justify-between items-center">
                             <CardTitle>Водители</CardTitle>
-                            {user?.roles.includes('ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-driver' })}><UserPlus className="mr-2 h-4 w-4" /> Добавить</Button>}
+                            {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-driver' })}><UserPlus className="mr-2 h-4 w-4" /> Добавить</Button>}
                         </CardHeader>
                         <CardContent>
                             <div className="rounded-md border h-[300px] overflow-y-auto">
                                 <Table>
-                                    <TableHeader><TableRow><TableHead>ФИО</TableHead><TableHead>Контакт</TableHead>{user?.roles.includes('ROLE_ADMIN') && <TableHead className="text-right">Действия</TableHead>}</TableRow></TableHeader>
+                                    <TableHeader><TableRow><TableHead>ФИО</TableHead><TableHead>Контакт</TableHead>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <TableHead className="text-right">Действия</TableHead>}</TableRow></TableHeader>
                                     <TableBody>
                                         {drivers.map((d) => (
                                             <TableRow key={d.id} className="hover:bg-muted/50">
                                                 <TableCell>{d.fullName}</TableCell><TableCell>{d.contact}</TableCell>
-                                                {user?.roles.includes('ROLE_ADMIN') && (
+                                                {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
                                                     <TableCell className="text-right">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>

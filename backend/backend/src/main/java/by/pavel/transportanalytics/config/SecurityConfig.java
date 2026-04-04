@@ -1,5 +1,7 @@
 package by.pavel.transportanalytics.config;
 
+import by.pavel.transportanalytics.security.CustomOAuth2UserService;
+import by.pavel.transportanalytics.security.OAuth2LoginSuccessHandler;
 import by.pavel.transportanalytics.security.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +32,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final UserDetailsServiceImpl userDetailsService;
+    private final CustomOAuth2UserService customOAuth2UserService;
+    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -45,9 +49,19 @@ public class SecurityConfig {
                         .successHandler((request, response, authentication) -> response.setStatus(HttpStatus.OK.value()))
                         .failureHandler((request, response, exception) -> response.setStatus(HttpStatus.UNAUTHORIZED.value()))
                 )
+                // --- Добавлена настройка OAuth 2.0 ---
+                .oauth2Login(oauth2 -> oauth2
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .userService(customOAuth2UserService) // Сохранение пользователя в БД
+                        )
+                        .successHandler(oAuth2LoginSuccessHandler) // Редирект на фронт
+                )
+                // -------------------------------------
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .logoutSuccessHandler((request, response, authentication) -> response.setStatus(HttpStatus.OK.value()))
+                        // Очистка куки сессии при выходе
+                        .deleteCookies("JSESSIONID")
                 )
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
@@ -62,9 +76,9 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of("http://localhost:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowCredentials(true); // Важно для работы сессий (JSESSIONID)
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/**", configuration); // Заменил "/api/**" на "/**", чтобы CORS работал и для эндпоинтов авторизации
         return source;
     }
 

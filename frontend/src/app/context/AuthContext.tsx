@@ -8,6 +8,8 @@ axios.defaults.withCredentials = true;
 interface User {
   username: string;
   roles: string[];
+  role?: string; // Добавлено для совместимости с OAuth
+  avatarUrl?: string; // Добавлено для картинки Google
 }
 
 interface AuthContextType {
@@ -16,6 +18,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  loginWithGoogle: () => void; // Добавлена функция входа через Google
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,10 +30,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         const checkUserStatus = async () => {
             try {
-                const response = await axios.get('http://localhost:8080/api/users/me');
+                // Изменен путь на /api/auth/me (наш новый контроллер с OAuth)
+                const response = await axios.get('http://localhost:8080/api/auth/me');
                 setUser(response.data);
             } catch {
-
                 console.log("Пользователь не авторизован");
                 setUser(null);
             } finally {
@@ -48,7 +51,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         await axios.post('http://localhost:8080/api/auth/login', params);
         
-        const response = await axios.get('http://localhost:8080/api/users/me');
+        // Изменен путь на /api/auth/me
+        const response = await axios.get('http://localhost:8080/api/auth/me');
         setUser(response.data);
     };
 
@@ -61,7 +65,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
     };
 
-    const authValues = { user, isLoading, login, register, logout };
+    // Добавлена функция редиректа на Google OAuth
+    const loginWithGoogle = () => {
+        window.location.href = 'http://localhost:8080/oauth2/authorization/google';
+    };
+
+    const authValues = { user, isLoading, login, register, logout, loginWithGoogle };
 
     return (
         <AuthContext.Provider value={authValues}>
