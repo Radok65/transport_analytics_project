@@ -201,7 +201,7 @@ export default function DashboardPage() {
             await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
             setModalState({ type: null });
             setRefuelData({ vehicleId: '', amount: '' });
-        } catch (error) { alert('Ошибка при заправке ТС'); }
+        } catch (error) {}
     };
 
     const startTripSimulation = async (e: FormEvent<HTMLFormElement>) => {
@@ -215,7 +215,6 @@ export default function DashboardPage() {
             const data = res.data;
 
             if (!data.success) {
-                alert(data.message);
                 return;
             }
 
@@ -244,7 +243,7 @@ export default function DashboardPage() {
                     try { await api.sendTelematicsData({ vehicleId, latitude: lat, longitude: lon, speed: 85, fuelLevel: currentFuel }); } 
                     catch (err) {}
                 }
-                await new Promise((resolve) => setTimeout(resolve, 50));
+                await new Promise((resolve) => setTimeout(resolve, 300));
             }
 
             const dest = destinations.find(d => d.id === destinationId);
@@ -270,13 +269,11 @@ export default function DashboardPage() {
             setActiveRouteCoords([]);
             setSimulatedVehicleRouteId(null);
         } catch (err) {
-            console.error(err);
             if (api.updateVehicleStatus) {
                 try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId); } catch(e){}
             }
             setActiveRouteCoords([]);
             setSimulatedVehicleRouteId(null);
-            alert('Ошибка при связи с сервером симуляции');
         }
     };
 
@@ -294,7 +291,7 @@ export default function DashboardPage() {
         try {
             const response = await api.downloadSummaryReport();
             downloadBlob(response, 'fleet_summary.pdf');
-        } catch (error) { alert('Ошибка скачивания отчета'); }
+        } catch (error) {}
     };
 
     const handleDetailedExportPDF = async (e: FormEvent<HTMLFormElement>) => {
@@ -306,7 +303,7 @@ export default function DashboardPage() {
             const response = await api.downloadVehicleReport(vId);
             downloadBlob(response, `detailed_report_${vehicle?.plateNumber || vId}.pdf`);
             setModalState({ type: null });
-        } catch (error) { alert('Ошибка скачивания отчета'); }
+        } catch (error) {}
     };
 
     const handleTripVehicleChange = (vId: string) => {
@@ -354,16 +351,22 @@ export default function DashboardPage() {
                     await api.createRepair(Number(vals.vehicleId), { ...vals, cost: Number(vals.cost) });
                     break;
                 case 'assign-driver':
-                    const dId = Number(vals.driverId);
-                    const dToUpd = drivers.find((d) => d.id === dId);
-                    if (dToUpd && modalState.data) {
-                        await api.updateDriver(dId, { ...dToUpd, assignedVehicleId: modalState.data.id });
+                    if (vals.driverId === 'none') {
+                        if (currentDriver) {
+                            await api.updateDriver(currentDriver.id, { ...currentDriver, assignedVehicleId: null });
+                        }
+                    } else {
+                        const dId = Number(vals.driverId);
+                        const dToUpd = drivers.find((d) => d.id === dId);
+                        if (dToUpd && modalState.data) {
+                            await api.updateDriver(dId, { ...dToUpd, assignedVehicleId: modalState.data.id });
+                        }
                     }
                     break;
             }
             setModalState({ type: null });
             fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-        } catch (err) { alert('Ошибка при сохранении данных.'); }
+        } catch (err) {}
     };
 
     const handleDelete = async () => {
@@ -377,7 +380,7 @@ export default function DashboardPage() {
             }
             setModalState({ type: null });
             fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-        } catch (err) { alert('Ошибка удаления. Возможно, объект связан с другими данными.'); }
+        } catch (err) {}
     };
 
     const sortedTrips = useMemo(() => {
@@ -493,7 +496,7 @@ export default function DashboardPage() {
                                             </Button>
                                         </motion.div>
                                         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setSimulateTripData({ ...simulateTripData, vehicleId: selectedVehicleId || '' }); setModalState({ type: 'simulate-trip' }); }}>
+                                            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={simulatedVehicleRouteId !== null} onClick={() => { setSimulateTripData({ ...simulateTripData, vehicleId: selectedVehicleId || '' }); setModalState({ type: 'simulate-trip' }); }}>
                                                 <Navigation className="mr-2 h-4 w-4" /> В рейс
                                             </Button>
                                         </motion.div>
@@ -878,7 +881,13 @@ export default function DashboardPage() {
                         <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label className="text-right">Водитель</Label>
-                                <Select name="driverId" defaultValue={currentDriver ? String(currentDriver.id) : undefined}><SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите водителя" /></SelectTrigger><SelectContent>{drivers.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.fullName}</SelectItem>)}</SelectContent></Select>
+                                <Select name="driverId" defaultValue={currentDriver ? String(currentDriver.id) : "none"}>
+                                    <SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите водителя" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Открепить водителя</SelectItem>
+                                        {drivers.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.fullName}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                         <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
