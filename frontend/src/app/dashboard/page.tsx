@@ -93,10 +93,10 @@ export default function DashboardPage() {
         let interval: NodeJS.Timeout;
         if (user && isMounted) {
             interval = setInterval(() => {
-                // Тихое обновление каждые 5 секунд
+                // Тихое обновление каждые 2 секунды (вместо 5), чтобы пользователи видели движение фуры чаще
                 fetchBaseData(setSelectedVehicleId);
                 fetchAnalytics(activeVehicleIdRef.current);
-            }, 5000);
+            }, 2000);
         }
         return () => clearInterval(interval);
     }, [user, isMounted, fetchBaseData, fetchAnalytics]);
@@ -128,11 +128,18 @@ export default function DashboardPage() {
         return <Cloud className="mr-2 h-5 w-5 text-gray-500" />;
     };
 
+    // Исправлено: Слив топлива теперь обновляет данные самой машины
     const handleSimulateDrain = async (vehicleId: number) => {
         const vehicle = vehicles.find((v) => v.id === vehicleId);
         if (!vehicle) return;
         try {
-            await api.sendTelematicsData({ vehicleId, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: Math.max(0, (vehicle.currentFuelLevel || 50) - 15) });
+            const newFuel = Math.max(0, (vehicle.currentFuelLevel || 50) - 15);
+            // Отправляем телематику для генерации инцидента
+            await api.sendTelematicsData({ vehicleId, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: newFuel });
+
+            // ПРИНУДИТЕЛЬНО обновляем сущность авто, чтобы топливо изменилось в UI
+            await api.updateVehicle(vehicleId, { ...vehicle, currentFuelLevel: newFuel });
+
             fetchBaseData(setSelectedVehicleId);
         } catch (error) { }
     };
@@ -146,6 +153,7 @@ export default function DashboardPage() {
         } catch (error) { }
     };
 
+    // Исправлено: Заправка теперь тоже обновляет данные самой машины
     const handleRefuelSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const vehicle = vehicles.find((v) => v.id === Number(refuelData.vehicleId));
@@ -153,6 +161,10 @@ export default function DashboardPage() {
         const newFuel = (vehicle.currentFuelLevel || 0) + Number(refuelData.amount);
         try {
             await api.sendTelematicsData({ vehicleId: vehicle.id, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: newFuel });
+
+            // ПРИНУДИТЕЛЬНО обновляем сущность авто
+            await api.updateVehicle(vehicle.id, { ...vehicle, currentFuelLevel: newFuel });
+
             fetchBaseData(setSelectedVehicleId);
             setModalState({ type: null });
             setRefuelData({ vehicleId: '', amount: '' });
@@ -209,14 +221,14 @@ export default function DashboardPage() {
 
                         setSimulatedPositions(prev => ({ ...prev, [vehicleId]: { lat, lon } }));
 
-                        let delay = 300;
+                        let delay = 100;
                         if (i > 0) {
                             const [prevLat, prevLon] = data.pathPoints[i - 1];
                             const distKm = getDistanceFromLatLonInKm(prevLat, prevLon, lat, lon);
-                            delay = Math.max(50, Math.min(distKm * 5000, 1000));
+                            delay = Math.max(20, Math.min(distKm * 1000, 200));
                         }
 
-                        if (i % 5 === 0 || i === frames - 1) {
+                        if (i % 3 === 0 || i === frames - 1) {
                             // Отправляем телематику
                             api.sendTelematicsData({ vehicleId, latitude: lat, longitude: lon, speed: 85, fuelLevel: currentFuel }).catch(() => { });
 
@@ -502,7 +514,7 @@ export default function DashboardPage() {
                                             {selectedVehicle.status === 'В ПУТИ' && (
                                                 <>
                                                     <span className="ml-2 text-sm text-blue-500 animate-pulse">(В пути...)</span>
-                                                    {!activeRoutes[selectedVehicle.id] && (
+                                                    {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && !activeRoutes[selectedVehicle.id] && (
                                                         <Button variant="ghost" size="icon" className="h-6 w-6 ml-2 text-red-500" title="Сбросить статус зависшей симуляции" onClick={() => resetVehicleStatus(selectedVehicle.id)}><RotateCcw className="h-3 w-3" /></Button>
                                                     )}
                                                 </>

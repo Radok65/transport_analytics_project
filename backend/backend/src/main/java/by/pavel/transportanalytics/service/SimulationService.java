@@ -28,7 +28,8 @@ public class SimulationService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final int SIMULATION_FRAMES = 800;
+    // Уменьшено с 800 до 150 для значительного ускорения симуляции (Проблема 2)
+    private static final int SIMULATION_FRAMES = 150;
 
     public SimulationResponseDto startSimulation(SimulationRequestDto request) {
         Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
