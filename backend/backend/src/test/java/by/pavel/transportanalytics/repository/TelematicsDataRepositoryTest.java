@@ -5,6 +5,7 @@ import by.pavel.transportanalytics.model.Vehicle;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,6 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
+@TestPropertySource(properties = {
+        "spring.flyway.enabled=false",
+        "spring.jpa.hibernate.ddl-auto=create-drop"
+})
 class TelematicsDataRepositoryTest {
 
     @Autowired
@@ -25,7 +30,6 @@ class TelematicsDataRepositoryTest {
 
     @Test
     void findAllByVehicleIdWithVehicleAndTripOrderByTimestampDesc_ReturnsSortedList() {
-
         Vehicle vehicle = new Vehicle();
         vehicle.setPlateNumber("5678CD");
         vehicle.setModel("Volvo");
@@ -61,7 +65,6 @@ class TelematicsDataRepositoryTest {
 
     @Test
     void findTopByVehicleIdOrderByTimestampDesc_ReturnsLatestData() {
-
         Vehicle vehicle = new Vehicle();
         vehicle.setPlateNumber("9999XX");
         vehicle.setModel("MAN");

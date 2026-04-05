@@ -1,24 +1,21 @@
 package by.pavel.transportanalytics.service;
 
 import by.pavel.transportanalytics.dto.AnalyticsDto;
-import by.pavel.transportanalytics.model.Repair;
-import by.pavel.transportanalytics.model.TelematicsAlert;
-import by.pavel.transportanalytics.model.Trip;
-import by.pavel.transportanalytics.model.Vehicle;
-import by.pavel.transportanalytics.repository.RepairRepository;
+import by.pavel.transportanalytics.dto.RepairDto;
+import by.pavel.transportanalytics.dto.TripDto;
+import by.pavel.transportanalytics.dto.VehicleDto;
 import by.pavel.transportanalytics.repository.TelematicsAlertRepository;
-import by.pavel.transportanalytics.repository.TripRepository;
-import by.pavel.transportanalytics.repository.VehicleRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -27,54 +24,53 @@ import static org.mockito.Mockito.when;
 class AnalyticsServiceTest {
 
     @Mock
-    private VehicleRepository vehicleRepository;
-
-    @Mock
-    private TripRepository tripRepository;
-
-    @Mock
-    private RepairRepository repairRepository;
+    private VehicleService vehicleService;
 
     @Mock
     private TelematicsAlertRepository telematicsAlertRepository;
 
-    @InjectMocks
     private AnalyticsService analyticsService;
+
+    @BeforeEach
+    void setUp() {
+        // Жесткая ручная инициализация гарантирует, что NullPointerException больше не появится
+        analyticsService = new AnalyticsService(vehicleService, telematicsAlertRepository);
+    }
 
     @Test
     void getGlobalAnalytics_Success() {
-        Vehicle vehicle = new Vehicle();
+        VehicleDto vehicle = new VehicleDto();
         vehicle.setId(1L);
         vehicle.setPlateNumber("AB1234-5");
 
-        Trip trip = new Trip();
+        TripDto trip = new TripDto();
         trip.setId(1L);
         trip.setDate(LocalDate.now());
         trip.setMileageStart(100);
         trip.setMileageEnd(200);
         trip.setFuelUsed(BigDecimal.valueOf(10));
-        vehicle.setTrips(List.of(trip));
+        vehicle.setTrips(new ArrayList<>(Collections.singletonList(trip)));
 
-        Repair repair = new Repair();
+        RepairDto repair = new RepairDto();
         repair.setId(1L);
         repair.setCost(BigDecimal.valueOf(50));
-        vehicle.setRepairs(List.of(repair));
+        vehicle.setRepairs(new ArrayList<>(Collections.singletonList(repair)));
 
-        TelematicsAlert alert = new TelematicsAlert();
-        alert.setId(1L);
-        alert.setFinancialLoss(BigDecimal.valueOf(20));
-        alert.setVehicle(vehicle);
+        // Используем Collections.singletonList() вместо List.of(), чтобы не путать компилятор типов Java
+        when(vehicleService.findAllVehicles()).thenReturn(Collections.singletonList(vehicle));
+        when(telematicsAlertRepository.calculateTotalAlertLosses()).thenReturn(BigDecimal.valueOf(20));
 
-        when(vehicleRepository.findAll()).thenReturn(List.of(vehicle));
-        when(tripRepository.findAll()).thenReturn(List.of(trip));
-        when(repairRepository.findAll()).thenReturn(List.of(repair));
-        when(telematicsAlertRepository.findAll()).thenReturn(List.of(alert));
+        // Явно создаем лист для Object[], чтобы не было конфликтов типов
+        List<Object[]> mockLosses = new ArrayList<>();
+        mockLosses.add(new Object[]{1L, BigDecimal.valueOf(20)});
+        when(telematicsAlertRepository.calculateAlertLossesGroupedByVehicle()).thenReturn(mockLosses);
 
         AnalyticsDto result = analyticsService.getGlobalAnalytics();
 
         assertNotNull(result);
         assertEquals(200, result.getTotalFleetMileage());
         assertEquals(100, result.getMileageThisMonth());
+
         assertEquals(BigDecimal.valueOf(25.70).stripTrailingZeros(), result.getTotalFuelCost().stripTrailingZeros());
         assertEquals(BigDecimal.valueOf(50), result.getTotalRepairCost());
 
@@ -87,29 +83,32 @@ class AnalyticsServiceTest {
 
     @Test
     void getVehicleAnalytics_Success() {
-        Vehicle vehicle = new Vehicle();
+        VehicleDto vehicle = new VehicleDto();
         vehicle.setId(1L);
         vehicle.setPlateNumber("AB1234-5");
         vehicle.setFuelNorm(BigDecimal.valueOf(10.0));
 
-        Trip trip = new Trip();
+        TripDto trip = new TripDto();
         trip.setId(1L);
         trip.setDate(LocalDate.now());
         trip.setMileageStart(100);
         trip.setMileageEnd(200);
         trip.setFuelUsed(BigDecimal.valueOf(10));
-        vehicle.setTrips(List.of(trip));
+        vehicle.setTrips(new ArrayList<>(Collections.singletonList(trip)));
 
-        Repair repair = new Repair();
+        RepairDto repair = new RepairDto();
         repair.setId(1L);
         repair.setCost(BigDecimal.valueOf(50));
-        vehicle.setRepairs(List.of(repair));
+        vehicle.setRepairs(new ArrayList<>(Collections.singletonList(repair)));
 
-        when(vehicleRepository.findAll()).thenReturn(List.of(vehicle));
-        when(tripRepository.findAll()).thenReturn(List.of(trip));
-        when(repairRepository.findAll()).thenReturn(List.of(repair));
-        when(telematicsAlertRepository.findAll()).thenReturn(List.of());
-        when(vehicleRepository.findById(1L)).thenReturn(Optional.of(vehicle));
+        when(vehicleService.findAllVehicles()).thenReturn(Collections.singletonList(vehicle));
+        when(telematicsAlertRepository.calculateTotalAlertLosses()).thenReturn(BigDecimal.valueOf(20));
+
+        List<Object[]> mockLosses = new ArrayList<>();
+        mockLosses.add(new Object[]{1L, BigDecimal.valueOf(20)});
+        when(telematicsAlertRepository.calculateAlertLossesGroupedByVehicle()).thenReturn(mockLosses);
+
+        when(telematicsAlertRepository.calculateAlertLossesByVehicleId(1L)).thenReturn(BigDecimal.valueOf(20));
 
         AnalyticsDto result = analyticsService.getVehicleAnalytics(1L);
 
@@ -125,11 +124,9 @@ class AnalyticsServiceTest {
 
     @Test
     void getVehicleAnalytics_VehicleNotFound_ReturnsGlobalAnalytics() {
-        when(vehicleRepository.findAll()).thenReturn(List.of());
-        when(tripRepository.findAll()).thenReturn(List.of());
-        when(repairRepository.findAll()).thenReturn(List.of());
-        when(telematicsAlertRepository.findAll()).thenReturn(List.of());
-        when(vehicleRepository.findById(99L)).thenReturn(Optional.empty());
+        when(vehicleService.findAllVehicles()).thenReturn(Collections.emptyList());
+        when(telematicsAlertRepository.calculateTotalAlertLosses()).thenReturn(BigDecimal.ZERO);
+        when(telematicsAlertRepository.calculateAlertLossesGroupedByVehicle()).thenReturn(Collections.emptyList());
 
         AnalyticsDto result = analyticsService.getVehicleAnalytics(99L);
 
