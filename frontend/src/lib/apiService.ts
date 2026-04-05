@@ -88,10 +88,27 @@ export interface AnalyticsData {
 const apiClient = axios.create({
   baseURL: 'http://localhost:8080/api',
   withCredentials: true,
+  // Отключаем кэширование на уровне HTTP заголовков
+  headers: {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  }
+});
+
+// Дополнительный перехватчик, который добавляет уникальную метку времени ко всем GET запросам, 
+// гарантируя, что Next.js 15 и браузер никогда не вернут закэшированный ответ.
+apiClient.interceptors.request.use((config) => {
+    if (config.method === 'get') {
+        config.params = {
+            ...config.params,
+            _t: new Date().getTime() // cache-buster
+        };
+    }
+    return config;
 });
 
 export const api = {
-
     getVehicles: () => apiClient.get<Vehicle[]>('/vehicles'),
     createVehicle: (data: any) => apiClient.post<Vehicle>('/vehicles', data),
     updateVehicle: (id: number, data: any) => apiClient.put<Vehicle>(`/vehicles/${id}`, data),
@@ -124,7 +141,6 @@ export const api = {
     downloadSummaryReport: () => apiClient.get('/reports/summary', { responseType: 'blob' }),
     downloadVehicleReport: (id: string) => apiClient.get(`/reports/vehicle/${id}`, { responseType: 'blob' }),
     
-    // Явно добавляем функции пользователя
     getCurrentUser: () => apiClient.get('/auth/me'),
     logoutUser: () => apiClient.post('/auth/logout'),
 };

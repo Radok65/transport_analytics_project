@@ -4,66 +4,36 @@ import { useState, useEffect, useMemo, FormEvent, JSX, useRef } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
 
+// Решение проблем с window is not defined (Проблема 1, 2)
+import dynamic from 'next/dynamic';
 import { useStore } from '@/store/useStore';
 
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-
 import { Button } from '@/components/ui/button';
-import {
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-    Card, CardContent, CardHeader, CardTitle, CardDescription,
-} from '@/components/ui/card';
-import {
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from '@/components/ui/dialog';
-import {
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import {
-    MoreHorizontal, PlusCircle, FileDown, Wrench, Map as MapIcon, FileText,
-    UserPlus, UserCheck, ArrowUpDown, ArrowUp, ArrowDown, Droplet, Activity,
-    MapPin, AlertTriangle, FastForward, Navigation, CloudRain, Sun, Snowflake, Cloud, MapPinned
-} from 'lucide-react';
-
+import { MoreHorizontal, PlusCircle, FileDown, Wrench, Map as MapIcon, FileText, UserPlus, UserCheck, ArrowUpDown, ArrowUp, ArrowDown, Droplet, Activity, MapPin, AlertTriangle, FastForward, Navigation, CloudRain, Sun, Snowflake, Cloud, MapPinned, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { DashboardCharts } from '@/components/DashboardCharts';
-import VehicleMap from '@/components/VehicleMap';
-import { TelematicsAlertDto } from '@/types';
 import api, { Vehicle, Driver, Destination, AnalyticsData } from '@/lib/apiService';
 import axios from 'axios';
 
-export interface WeatherData {
-    condition: string;
-    temperature: number;
-}
+// Динамические импорты карт без SSR
+const VehicleMap = dynamic(() => import('@/components/MapComponent'), { ssr: false, loading: () => <div className="h-full w-full bg-muted/20 animate-pulse rounded-md border flex items-center justify-center">Загрузка карты...</div> });
+const PickerMap = dynamic(() => import('@/components/MapComponent').then(mod => mod.PickerMap), { ssr: false });
 
-type ModalType =
-    | 'add-trip' | 'simulate-trip' | 'refuel' | 'add-vehicle' | 'edit-vehicle'
-    | 'add-driver' | 'edit-driver' | 'add-repair' | 'assign-driver' | 'detailed-report'
-    | 'delete-vehicle' | 'delete-driver' | 'add-destination';
+export interface WeatherData { condition: string; temperature: number; }
 
+type ModalType = 'add-trip' | 'simulate-trip' | 'refuel' | 'add-vehicle' | 'edit-vehicle' | 'add-driver' | 'edit-driver' | 'add-repair' | 'assign-driver' | 'detailed-report' | 'delete-vehicle' | 'delete-driver' | 'add-destination';
 type ModalData = Vehicle | Driver | null;
 
 const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }): JSX.Element => {
@@ -72,26 +42,22 @@ const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }): JSX.Eleme
     return <ArrowUpDown className="inline ml-2 h-4 w-4 text-muted-foreground/50" />;
 };
 
-function LocationPickerEvents({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
-    useMapEvents({
-        click(e) {
-            onLocationSelect(e.latlng.lat, e.latlng.lng);
-        },
-    });
-    return null;
+// Функция для расчета дистанции (Haversine formula) для динамической скорости
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 export default function DashboardPage() {
     const { user, isLoading: isAuthLoading, logout } = useAuth();
     const router = useRouter();
-
     const [isMounted, setIsMounted] = useState(false);
 
-    const { 
-        vehicles, drivers, destinations, alerts, analyticsData, isDataLoading,
-        fetchAll, fetchBaseData, fetchAnalytics, setVehicles
-    } = useStore();
-
+    const { vehicles, drivers, destinations, alerts, analyticsData, isDataLoading, fetchAll, fetchBaseData, fetchAnalytics } = useStore();
     const activeVehicleIdRef = useRef<string | null>(null);
     const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(null);
 
@@ -102,15 +68,13 @@ export default function DashboardPage() {
     const [destLat, setDestLat] = useState<number | ''>('');
     const [destLon, setDestLon] = useState<number | ''>('');
 
-    const [activeRouteCoords, setActiveRouteCoords] = useState<[number, number][]>([]);
-    const [simulatedVehicleRouteId, setSimulatedVehicleRouteId] = useState<number | null>(null);
+    // Словари для поддержки симуляции множества машин одновременно
+    const [activeRoutes, setActiveRoutes] = useState<Record<number, [number, number][]>>({});
+    const [simulatedPositions, setSimulatedPositions] = useState<Record<number, { lat: number, lon: number }>>({});
 
     const [simulateTripData, setSimulateTripData] = useState({ vehicleId: '', destinationId: '' });
     const [refuelData, setRefuelData] = useState({ vehicleId: '', amount: '' });
-    const [tripFormData, setTripFormData] = useState({
-        date: new Date().toISOString().split('T')[0],
-        driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '',
-    });
+    const [tripFormData, setTripFormData] = useState({ date: new Date().toISOString().split('T')[0], driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '' });
 
     useEffect(() => {
         setIsMounted(true);
@@ -118,7 +82,7 @@ export default function DashboardPage() {
             if (vehicles.length === 0) useStore.setState({ isDataLoading: true });
             fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
         }
-    }, [user, fetchAll, vehicles.length]);
+    }, [user, fetchAll]);
 
     useEffect(() => {
         activeVehicleIdRef.current = selectedVehicleId;
@@ -129,6 +93,7 @@ export default function DashboardPage() {
         let interval: NodeJS.Timeout;
         if (user && isMounted) {
             interval = setInterval(() => {
+                // Тихое обновление каждые 5 секунд
                 fetchBaseData(setSelectedVehicleId);
                 fetchAnalytics(activeVehicleIdRef.current);
             }, 5000);
@@ -147,9 +112,8 @@ export default function DashboardPage() {
             try {
                 const res = await axios.get(`http://localhost:8080/api/weather?lat=${weatherLat}&lon=${weatherLon}`);
                 setCurrentWeather(res.data);
-            } catch (err) {}
+            } catch (err) { }
         };
-        
         if (user) {
             fetchWeather();
             const interval = setInterval(fetchWeather, 30000);
@@ -168,24 +132,18 @@ export default function DashboardPage() {
         const vehicle = vehicles.find((v) => v.id === vehicleId);
         if (!vehicle) return;
         try {
-            await api.sendTelematicsData({
-                vehicleId, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615,
-                speed: 0, fuelLevel: Math.max(0, (vehicle.currentFuelLevel || 50) - 15),
-            });
-            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-        } catch (error) { console.error(error); }
+            await api.sendTelematicsData({ vehicleId, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: Math.max(0, (vehicle.currentFuelLevel || 50) - 15) });
+            fetchBaseData(setSelectedVehicleId);
+        } catch (error) { }
     };
 
     const handleSimulateSpeeding = async (vehicleId: number) => {
         const vehicle = vehicles.find((v) => v.id === vehicleId);
         if (!vehicle) return;
         try {
-            await api.sendTelematicsData({
-                vehicleId, latitude: (vehicle.lastLatitude || 53.9045) + 0.005, longitude: vehicle.lastLongitude || 27.5615,
-                speed: 110, fuelLevel: vehicle.currentFuelLevel || 50,
-            });
-            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-        } catch (error) { console.error(error); }
+            await api.sendTelematicsData({ vehicleId, latitude: (vehicle.lastLatitude || 53.9045) + 0.005, longitude: vehicle.lastLongitude || 27.5615, speed: 110, fuelLevel: vehicle.currentFuelLevel || 50 });
+            fetchBaseData(setSelectedVehicleId);
+        } catch (error) { }
     };
 
     const handleRefuelSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -194,116 +152,136 @@ export default function DashboardPage() {
         if (!vehicle) return;
         const newFuel = (vehicle.currentFuelLevel || 0) + Number(refuelData.amount);
         try {
-            await api.sendTelematicsData({
-                vehicleId: vehicle.id, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615,
-                speed: 0, fuelLevel: newFuel,
-            });
-            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
+            await api.sendTelematicsData({ vehicleId: vehicle.id, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: newFuel });
+            fetchBaseData(setSelectedVehicleId);
             setModalState({ type: null });
             setRefuelData({ vehicleId: '', amount: '' });
-        } catch (error) {}
+        } catch (error) { }
+    };
+
+    const resetVehicleStatus = async (vehicleId: number) => {
+        if (api.updateVehicleStatus) {
+            await api.updateVehicleStatus(vehicleId, "СВОБОДЕН");
+            fetchBaseData(setSelectedVehicleId);
+        }
     };
 
     const startTripSimulation = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const vehicleId = Number(simulateTripData.vehicleId);
         const destinationId = Number(simulateTripData.destinationId);
+        const vehicle = vehicles.find(v => v.id === vehicleId);
+        const driver = drivers.find((d) => d.assignedVehicleId === vehicleId);
+
+        // Проверка наличия водителя перед отправкой в рейс
+        if (!driver) {
+            alert("Ошибка: Нельзя отправить в рейс фуру без закрепленного водителя!");
+            return;
+        }
+
+        if (!vehicle) return;
+
         setModalState({ type: null });
 
         try {
             const res = await api.startSimulation(vehicleId, destinationId);
             const data = res.data;
 
-            if (!data.success) {
-                return;
-            }
+            if (!data.success) return;
 
             setSelectedVehicleId(String(vehicleId));
-            setActiveRouteCoords(data.pathPoints);
-            setSimulatedVehicleRouteId(vehicleId);
 
-            if (api.updateVehicleStatus) {
-                await api.updateVehicleStatus(vehicleId, "В ПУТИ");
-            }
-            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId); 
+            // Сохраняем маршрут в словарь для конкретной машины
+            setActiveRoutes(prev => ({ ...prev, [vehicleId]: data.pathPoints }));
+
+            if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "В ПУТИ");
 
             const frames = data.pathPoints.length;
             const stepFuel = data.fuelNeeded / frames;
             let currentFuel = data.currentFuel;
 
-            for (let i = 0; i < frames; i++) {
-                const [lat, lon] = data.pathPoints[i];
-                currentFuel -= stepFuel;
+            // Асинхронный цикл симуляции: выполняется в фоне, позволяет запускать другие фуры
+            (async () => {
+                try {
+                    for (let i = 0; i < frames; i++) {
+                        const [lat, lon] = data.pathPoints[i];
+                        currentFuel -= stepFuel;
 
-                setVehicles((prev) => prev.map((v) =>
-                    v.id === vehicleId ? { ...v, lastLatitude: lat, lastLongitude: lon, currentFuelLevel: currentFuel } : v
-                ));
+                        setSimulatedPositions(prev => ({ ...prev, [vehicleId]: { lat, lon } }));
 
-                if (i % 10 === 0 || i === frames - 1) {
-                    try { await api.sendTelematicsData({ vehicleId, latitude: lat, longitude: lon, speed: 85, fuelLevel: currentFuel }); } 
-                    catch (err) {}
+                        let delay = 300;
+                        if (i > 0) {
+                            const [prevLat, prevLon] = data.pathPoints[i - 1];
+                            const distKm = getDistanceFromLatLonInKm(prevLat, prevLon, lat, lon);
+                            delay = Math.max(50, Math.min(distKm * 5000, 1000));
+                        }
+
+                        if (i % 5 === 0 || i === frames - 1) {
+                            // Отправляем телематику
+                            api.sendTelematicsData({ vehicleId, latitude: lat, longitude: lon, speed: 85, fuelLevel: currentFuel }).catch(() => { });
+
+                            // Сохраняем координаты в саму машину, чтобы не-админы тоже видели движение
+                            api.updateVehicle(vehicleId, {
+                                ...vehicle,
+                                lastLatitude: lat,
+                                lastLongitude: lon,
+                                currentFuelLevel: currentFuel
+                            }).catch(() => { });
+                        }
+
+                        await new Promise((resolve) => setTimeout(resolve, delay));
+                    }
+
+                    const dest = destinations.find(d => d.id === destinationId);
+                    const lastMileage = vehicle.trips.length > 0 ? Math.max(...vehicle.trips.map((t) => t.mileageEnd)) : 0;
+
+                    await api.createTrip(vehicleId, {
+                        date: new Date().toISOString().split('T')[0],
+                        driverId: driver.id,
+                        mileageStart: lastMileage,
+                        mileageEnd: lastMileage + data.distanceKm,
+                        fuelUsed: data.fuelNeeded,
+                    });
+
+                    if (dest) await api.sendArrivalAlert(vehicleId, dest.name);
+
+                } catch (err) {
+                    console.error("Ошибка цикла симуляции", err);
+                } finally {
+                    if (api.updateVehicleStatus) try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); } catch (e) { }
+                    // Очищаем маршрут и позицию для конкретной машины после завершения
+                    setActiveRoutes(prev => { const next = { ...prev }; delete next[vehicleId]; return next; });
+                    setSimulatedPositions(prev => { const next = { ...prev }; delete next[vehicleId]; return next; });
+                    fetchBaseData(setSelectedVehicleId);
                 }
-                await new Promise((resolve) => setTimeout(resolve, 300));
-            }
+            })();
 
-            const dest = destinations.find(d => d.id === destinationId);
-            const driver = drivers.find((d) => d.assignedVehicleId === vehicleId);
-            const vehicle = vehicles.find((v) => v.id === vehicleId);
-            const lastMileage = vehicle && vehicle.trips.length > 0 ? Math.max(...vehicle.trips.map((t) => t.mileageEnd)) : 0;
-
-            await api.createTrip(vehicleId, {
-                date: new Date().toISOString().split('T')[0],
-                driverId: driver ? driver.id : null,
-                mileageStart: lastMileage,
-                mileageEnd: lastMileage + data.distanceKm,
-                fuelUsed: data.fuelNeeded,
-            });
-
-            if (dest) {
-                await api.sendArrivalAlert(vehicleId, dest.name);
-            }
-
-            if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "СВОБОДЕН");
-            
-            await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-            setActiveRouteCoords([]);
-            setSimulatedVehicleRouteId(null);
         } catch (err) {
-            if (api.updateVehicleStatus) {
-                try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); await fetchAll(activeVehicleIdRef.current, setSelectedVehicleId); } catch(e){}
-            }
-            setActiveRouteCoords([]);
-            setSimulatedVehicleRouteId(null);
+            console.error("Simulation error", err);
+            alert("Ошибка старта симуляции");
         }
     };
 
     const downloadBlob = (response: any, filename: string) => {
         const url = window.URL.createObjectURL(new Blob([response.data]));
         const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        link.parentNode?.removeChild(link);
+        link.href = url; link.setAttribute('download', filename);
+        document.body.appendChild(link); link.click(); link.parentNode?.removeChild(link);
     };
 
     const handleSummaryExportPDF = async () => {
-        try {
-            const response = await api.downloadSummaryReport();
-            downloadBlob(response, 'fleet_summary.pdf');
-        } catch (error) {}
+        try { const response = await api.downloadSummaryReport(); downloadBlob(response, 'fleet_summary.pdf'); } catch (error) { }
     };
 
     const handleDetailedExportPDF = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        const vId = fd.get('vehicleId') as string;
+        const fd = new FormData(e.currentTarget); const vId = fd.get('vehicleId') as string;
         try {
             const vehicle = vehicles.find(v => v.id.toString() === vId);
             const response = await api.downloadVehicleReport(vId);
             downloadBlob(response, `detailed_report_${vehicle?.plateNumber || vId}.pdf`);
             setModalState({ type: null });
-        } catch (error) {}
+        } catch (error) { }
     };
 
     const handleTripVehicleChange = (vId: string) => {
@@ -326,17 +304,35 @@ export default function DashboardPage() {
                     setDestLon('');
                     break;
                 case 'add-trip':
-                    await api.createTrip(Number(tripFormData.vehicleId), {
-                        ...tripFormData, mileageStart: Number(tripFormData.mileageStart), mileageEnd: Number(tripFormData.mileageEnd), fuelUsed: Number(tripFormData.fuelUsed),
-                    });
+                    await api.createTrip(Number(tripFormData.vehicleId), { ...tripFormData, mileageStart: Number(tripFormData.mileageStart), mileageEnd: Number(tripFormData.mileageEnd), fuelUsed: Number(tripFormData.fuelUsed) });
                     setTripFormData({ date: new Date().toISOString().split('T')[0], driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '' });
                     break;
                 case 'add-vehicle':
-                    await api.createVehicle({ ...vals, year: Number(vals.year), fuelNorm: Number(vals.fuelNorm) });
+                    // Безопасная обработка чисел с плавающей точкой (защита от ошибки 500 DB)
+                    const safeFuelNorm = String(vals.fuelNorm || '0').replace(',', '.');
+                    const parsedFuelNorm = parseFloat(safeFuelNorm) || 0.0;
+
+                    if (parsedFuelNorm >= 1000) {
+                        alert("Ошибка: Норма ГСМ слишком большая! Максимальное значение 999.99");
+                        return;
+                    }
+
+                    const newVehicleData = {
+                        plateNumber: String(vals.plateNumber || '').trim(),
+                        model: String(vals.model || '').trim(),
+                        year: parseInt(String(vals.year), 10) || new Date().getFullYear(),
+                        fuelNorm: parsedFuelNorm,
+                        lastLatitude: 53.9061,
+                        lastLongitude: 27.9564,
+                        currentFuelLevel: 100.0,
+                        status: "СВОБОДЕН"
+                    };
+                    await api.createVehicle(newVehicleData as any);
                     break;
                 case 'edit-vehicle':
                     if (modalState.data && 'plateNumber' in modalState.data) {
-                        await api.updateVehicle(modalState.data.id, { ...vals, id: modalState.data.id, year: Number(vals.year), fuelNorm: Number(vals.fuelNorm) });
+                        const editSafeFuelNorm = String(vals.fuelNorm || '0').replace(',', '.');
+                        await api.updateVehicle(modalState.data.id, { ...vals, id: modalState.data.id, year: Number(vals.year), fuelNorm: parseFloat(editSafeFuelNorm) || 0.0 });
                     }
                     break;
                 case 'add-driver':
@@ -352,21 +348,19 @@ export default function DashboardPage() {
                     break;
                 case 'assign-driver':
                     if (vals.driverId === 'none') {
-                        if (currentDriver) {
-                            await api.updateDriver(currentDriver.id, { ...currentDriver, assignedVehicleId: null });
-                        }
+                        if (currentDriver) { await api.updateDriver(currentDriver.id, { ...currentDriver, assignedVehicleId: null }); }
                     } else {
                         const dId = Number(vals.driverId);
                         const dToUpd = drivers.find((d) => d.id === dId);
-                        if (dToUpd && modalState.data) {
-                            await api.updateDriver(dId, { ...dToUpd, assignedVehicleId: modalState.data.id });
-                        }
+                        if (dToUpd && modalState.data) { await api.updateDriver(dId, { ...dToUpd, assignedVehicleId: modalState.data.id }); }
                     }
                     break;
             }
             setModalState({ type: null });
-            fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-        } catch (err) {}
+            fetchBaseData(setSelectedVehicleId);
+        } catch (err: any) {
+            alert("Ошибка сохранения: " + (err.response?.data?.message || err.message || "Неизвестная ошибка"));
+        }
     };
 
     const handleDelete = async () => {
@@ -379,8 +373,8 @@ export default function DashboardPage() {
                 await api.deleteDriver(modalState.data.id);
             }
             setModalState({ type: null });
-            fetchAll(activeVehicleIdRef.current, setSelectedVehicleId);
-        } catch (err) {}
+            fetchBaseData(setSelectedVehicleId);
+        } catch (err) { }
     };
 
     const sortedTrips = useMemo(() => {
@@ -393,13 +387,9 @@ export default function DashboardPage() {
         });
     }, [selectedVehicle, tripSortOrder]);
 
-    useEffect(() => {
-        if (!isAuthLoading && !user) router.push('/');
-    }, [user, isAuthLoading, router]);
-
     if (!isMounted || isAuthLoading) return <div className="flex items-center justify-center min-h-screen">Загрузка...</div>;
     if (!user) return null;
-    if (isDataLoading) return <div className="flex items-center justify-center min-h-screen">Загрузка данных...</div>;
+    if (isDataLoading && vehicles.length === 0) return <div className="flex items-center justify-center min-h-screen">Загрузка данных...</div>;
 
     return (
         <div className="flex flex-col min-h-screen bg-background">
@@ -412,14 +402,9 @@ export default function DashboardPage() {
                         {user.avatarUrl ? (
                             <img src={user.avatarUrl} alt="Аватар" className="w-10 h-10 rounded-full border border-gray-200" referrerPolicy="no-referrer" />
                         ) : (
-                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                                {user.username.charAt(0).toUpperCase()}
-                            </div>
+                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">{user.username.charAt(0).toUpperCase()}</div>
                         )}
-                        <div className="flex flex-col">
-                            <span className="font-semibold text-gray-800 leading-none">{user.username}</span>
-                            <span className="text-xs text-gray-500 mt-1">{user.role}</span>
-                        </div>
+                        <span className="font-semibold text-foreground leading-none">{user.username}</span>
                     </div>
                     <Button onClick={() => { logout(); router.push('/'); }}>Выход</Button>
                 </div>
@@ -429,42 +414,17 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <h1 className="text-3xl font-bold">Аналитическая панель</h1>
                     <div className="flex space-x-2 flex-wrap gap-y-2">
-                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                            <Button variant="outline" onClick={() => { if (selectedVehicleId) handleTripVehicleChange(selectedVehicleId); setModalState({ type: 'add-trip' }); }}>
-                                <MapIcon className="mr-2 h-4 w-4" /> Создать путевой лист
-                            </Button>
-                        </motion.div>
-                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                            <Button variant="outline" onClick={() => setModalState({ type: 'add-repair' })}>
-                                <Wrench className="mr-2 h-4 w-4" /> Записать ремонт/ТО
-                            </Button>
-                        </motion.div>
-                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                            <Button variant="outline" onClick={() => setModalState({ type: 'detailed-report' })}>
-                                <FileText className="mr-2 h-4 w-4" /> Детализированный отчет
-                            </Button>
-                        </motion.div>
-                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                            <Button variant="outline" onClick={handleSummaryExportPDF}>
-                                <FileDown className="mr-2 h-4 w-4" /> Сводный отчет (PDF)
-                            </Button>
-                        </motion.div>
+                        <Button variant="outline" onClick={() => { if (selectedVehicleId) handleTripVehicleChange(selectedVehicleId); setModalState({ type: 'add-trip' }); }}><MapIcon className="mr-2 h-4 w-4" /> Создать путевой лист</Button>
+                        <Button variant="outline" onClick={() => setModalState({ type: 'add-repair' })}><Wrench className="mr-2 h-4 w-4" /> Записать ремонт/ТО</Button>
+                        <Button variant="outline" onClick={() => setModalState({ type: 'detailed-report' })}><FileText className="mr-2 h-4 w-4" /> Детализированный отчет</Button>
+                        <Button variant="outline" onClick={handleSummaryExportPDF}><FileDown className="mr-2 h-4 w-4" /> Сводный отчет (PDF)</Button>
                     </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Card>
-                        <CardHeader><CardTitle>Общий пробег (все ТС)</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold">{analyticsData?.totalFleetMileage?.toLocaleString('ru-RU')} км</div></CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle>Суммарные затраты</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold">{analyticsData?.totalFleetCost?.toLocaleString('ru-RU', { style: 'currency', currency: 'BYN' })}</div></CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle>Пробег за месяц</CardTitle></CardHeader>
-                        <CardContent><div className="text-2xl font-bold">{analyticsData?.mileageThisMonth?.toLocaleString('ru-RU')} км</div></CardContent>
-                    </Card>
+                    <Card><CardHeader><CardTitle>Общий пробег (все ТС)</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{analyticsData?.totalFleetMileage?.toLocaleString('ru-RU')} км</div></CardContent></Card>
+                    <Card><CardHeader><CardTitle>Суммарные затраты</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{analyticsData?.totalFleetCost?.toLocaleString('ru-RU', { style: 'currency', currency: 'BYN' })}</div></CardContent></Card>
+                    <Card><CardHeader><CardTitle>Пробег за месяц</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{analyticsData?.mileageThisMonth?.toLocaleString('ru-RU')} км</div></CardContent></Card>
                 </div>
 
                 <DashboardCharts data={analyticsData as any} selectedVehicleId={selectedVehicleId ? Number(selectedVehicleId) : null} vehicleCount={vehicles.length} />
@@ -479,63 +439,45 @@ export default function DashboardPage() {
                             <div className="flex items-center space-x-6">
                                 {currentWeather && (
                                     <div className="flex items-center bg-muted/50 px-3 py-1.5 rounded-md border text-sm font-medium">
-                                        {getWeatherIcon(currentWeather.condition)}
-                                        {currentWeather.temperature > 0 ? '+' : ''}{currentWeather.temperature.toFixed(1)}°C
+                                        {getWeatherIcon(currentWeather.condition)}{currentWeather.temperature > 0 ? '+' : ''}{currentWeather.temperature.toFixed(1)}°C
                                     </div>
                                 )}
                                 {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
                                     <div className="flex space-x-2">
-                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                            <Button variant="outline" onClick={() => setModalState({ type: 'add-destination' })}>
-                                                <MapPinned className="mr-2 h-4 w-4" /> Новая точка
-                                            </Button>
-                                        </motion.div>
-                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                            <Button variant="outline" className="border-blue-500 text-blue-600 hover:bg-blue-50" onClick={() => { setRefuelData({ vehicleId: selectedVehicleId || '', amount: '' }); setModalState({ type: 'refuel' }); }}>
-                                                <Droplet className="mr-2 h-4 w-4" /> Заправить
-                                            </Button>
-                                        </motion.div>
-                                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={simulatedVehicleRouteId !== null} onClick={() => { setSimulateTripData({ ...simulateTripData, vehicleId: selectedVehicleId || '' }); setModalState({ type: 'simulate-trip' }); }}>
-                                                <Navigation className="mr-2 h-4 w-4" /> В рейс
-                                            </Button>
-                                        </motion.div>
+                                        <Button variant="outline" onClick={() => setModalState({ type: 'add-destination' })}><MapPinned className="mr-2 h-4 w-4" /> Новая точка</Button>
+                                        <Button variant="outline" className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950" onClick={() => { setRefuelData({ vehicleId: selectedVehicleId || '', amount: '' }); setModalState({ type: 'refuel' }); }}><Droplet className="mr-2 h-4 w-4" /> Заправить</Button>
+                                        <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setSimulateTripData({ ...simulateTripData, vehicleId: selectedVehicleId || '' }); setModalState({ type: 'simulate-trip' }); }}><Navigation className="mr-2 h-4 w-4" /> В рейс</Button>
                                     </div>
                                 )}
                             </div>
                         </CardHeader>
                         <CardContent className="flex-grow p-4 pt-0">
-                            <VehicleMap 
-                                vehicles={vehicles} 
-                                selectedVehicleId={selectedVehicleId ? Number(selectedVehicleId) : null} 
-                                onVehicleSelect={setSelectedVehicleId} 
-                                activeRoute={selectedVehicleId && Number(selectedVehicleId) === simulatedVehicleRouteId ? activeRouteCoords : []} 
-                            />
+                            <div className="h-full w-full rounded-md overflow-hidden border relative">
+                                <VehicleMap
+                                    vehicles={vehicles}
+                                    selectedVehicleId={selectedVehicleId ? Number(selectedVehicleId) : null}
+                                    onVehicleSelect={setSelectedVehicleId}
+                                    activeRoutes={activeRoutes}
+                                    simulatedPositions={simulatedPositions}
+                                />
+                            </div>
                         </CardContent>
                     </Card>
 
                     <Card className="col-span-1 flex flex-col h-[500px]">
-                        <CardHeader>
-                            <CardTitle className="flex items-center"><AlertTriangle className="mr-2 h-5 w-5" /> Лента событий</CardTitle>
-                            <CardDescription>Сливы топлива, нарушения ПДД и прибытия</CardDescription>
-                        </CardHeader>
+                        <CardHeader><CardTitle className="flex items-center"><AlertTriangle className="mr-2 h-5 w-5" /> Лента событий</CardTitle><CardDescription>Инциденты и прибытия</CardDescription></CardHeader>
                         <CardContent className="flex-grow overflow-y-auto p-4 pt-0">
                             {alerts.length > 0 ? (
                                 <div className="space-y-4">
                                     {alerts.map((alert) => (
                                         <div key={alert.id} className="flex flex-col p-3 border rounded-lg bg-background shadow-sm">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className="font-bold text-sm">{alert.plateNumber}</span>
-                                                <span className="text-xs text-muted-foreground">{new Date(alert.timestamp).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                                            </div>
-                                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md w-fit mb-2 ${alert.type === 'FUEL_DROP' ? 'bg-red-100 text-red-800' : alert.type === 'ARRIVAL' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-                                                {alert.type === 'FUEL_DROP' ? '💧 СЛИВ ТОПЛИВА' : alert.type === 'ARRIVAL' ? '✅ ПРИБЫТИЕ' : '⚠️ ПРЕВЫШЕНИЕ СКОРОСТИ'}
-                                            </span>
+                                            <div className="flex justify-between items-start mb-2"><span className="font-bold text-sm">{alert.plateNumber}</span><span className="text-xs text-muted-foreground">{new Date(alert.timestamp).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                                            <span className={`text-[10px] font-bold px-2 py-1 rounded-md w-fit mb-2 ${alert.type === 'FUEL_DROP' ? 'bg-red-100 text-red-800' : alert.type === 'ARRIVAL' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{alert.type === 'FUEL_DROP' ? '💧 СЛИВ ТОПЛИВА' : alert.type === 'ARRIVAL' ? '✅ ПРИБЫТИЕ' : '⚠️ СКОРОСТЬ'}</span>
                                             <p className="text-sm font-medium">{alert.description}</p>
                                         </div>
                                     ))}
                                 </div>
-                            ) : (<div className="h-full flex items-center justify-center text-muted-foreground text-sm">Инцидентов не обнаружено</div>)}
+                            ) : (<div className="h-full flex items-center justify-center text-muted-foreground text-sm">Инцидентов нет</div>)}
                         </CardContent>
                     </Card>
                 </div>
@@ -546,10 +488,7 @@ export default function DashboardPage() {
                             <div><CardTitle className="text-xl">Анализ Транспортного Средства</CardTitle></div>
                             <Select value={selectedVehicleId ?? 'all'} onValueChange={(val) => setSelectedVehicleId(val === 'all' ? null : val)}>
                                 <SelectTrigger className="w-[280px]"><SelectValue placeholder="Выберите автомобиль" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">🔍 Обзор всего парка</SelectItem>
-                                    {vehicles.map((v) => <SelectItem key={v.id} value={v.id.toString()}>{v.plateNumber} ({v.model})</SelectItem>)}
-                                </SelectContent>
+                                <SelectContent><SelectItem value="all">🔍 Обзор всего парка</SelectItem>{vehicles.map((v) => <SelectItem key={v.id} value={v.id.toString()}>{v.plateNumber} ({v.model})</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                     </CardHeader>
@@ -557,33 +496,44 @@ export default function DashboardPage() {
                         <AnimatePresence mode="wait">
                             {selectedVehicle && analyticsData ? (
                                 <motion.div key={selectedVehicle.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                    
                                     <div className="space-y-4">
-                                        <h3 className="font-semibold text-lg">
+                                        <h3 className="font-semibold text-lg flex items-center">
                                             {selectedVehicle.plateNumber}
-                                            {selectedVehicle.status === 'В ПУТИ' && <span className="ml-2 text-sm text-blue-500 animate-pulse">(В пути...)</span>}
+                                            {selectedVehicle.status === 'В ПУТИ' && (
+                                                <>
+                                                    <span className="ml-2 text-sm text-blue-500 animate-pulse">(В пути...)</span>
+                                                    {!activeRoutes[selectedVehicle.id] && (
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6 ml-2 text-red-500" title="Сбросить статус зависшей симуляции" onClick={() => resetVehicleStatus(selectedVehicle.id)}><RotateCcw className="h-3 w-3" /></Button>
+                                                    )}
+                                                </>
+                                            )}
                                         </h3>
                                         <p className="text-sm text-muted-foreground">{selectedVehicle.model}, {selectedVehicle.year} год</p>
 
-                                        <Card className="border-l-4 border-l-blue-500 bg-blue-50/50 shadow-none">
-                                            <CardHeader className="pb-2"><CardTitle className="text-md flex items-center text-blue-700"><Activity className="mr-2 h-5 w-5 animate-pulse" />Телематика</CardTitle></CardHeader>
+                                        <Card className="border-l-4 border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-none">
+                                            <CardHeader className="pb-2"><CardTitle className="text-md flex items-center text-blue-700 dark:text-blue-400"><Activity className="mr-2 h-5 w-5 animate-pulse" />Телематика</CardTitle></CardHeader>
                                             <CardContent>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="flex flex-col items-center p-3 bg-background rounded-md border">
                                                         <Droplet className="text-blue-500 mb-1 h-6 w-6" />
                                                         <span className="text-xs text-muted-foreground">Бак (ДУТ)</span>
-                                                        <span className="font-mono text-xl font-bold">{selectedVehicle.currentFuelLevel?.toFixed(1) || '0.0'} л</span>
+                                                        <span className="font-mono text-xl font-bold">
+                                                            {simulatedPositions[selectedVehicle.id] ? vehicles.find(v => v.id === selectedVehicle.id)?.currentFuelLevel?.toFixed(1) : selectedVehicle.currentFuelLevel?.toFixed(1) || '0.0'} л
+                                                        </span>
                                                     </div>
                                                     <div className="flex flex-col items-center p-3 bg-background rounded-md border">
                                                         <MapPin className="text-green-500 mb-1 h-6 w-6" />
                                                         <span className="text-xs text-muted-foreground">Координаты</span>
-                                                        <span className="font-mono text-sm mt-1 text-center">{selectedVehicle.lastLatitude?.toFixed(4) || 'N/A'}<br />{selectedVehicle.lastLongitude?.toFixed(4) || 'N/A'}</span>
+                                                        <span className="font-mono text-sm mt-1 text-center">
+                                                            {simulatedPositions[selectedVehicle.id] ? simulatedPositions[selectedVehicle.id].lat.toFixed(4) : selectedVehicle.lastLatitude?.toFixed(4) || 'N/A'}<br />
+                                                            {simulatedPositions[selectedVehicle.id] ? simulatedPositions[selectedVehicle.id].lon.toFixed(4) : selectedVehicle.lastLongitude?.toFixed(4) || 'N/A'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && selectedVehicle.status !== 'В ПУТИ' && (
                                                     <div className="grid grid-cols-2 gap-2 mt-4">
                                                         <Button variant="outline" size="sm" onClick={() => handleSimulateSpeeding(selectedVehicle.id)}><FastForward className="mr-2 h-4 w-4 text-orange-500" />Скорость</Button>
-                                                        <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => handleSimulateDrain(selectedVehicle.id)}><AlertTriangle className="mr-2 h-4 w-4" />Слив</Button>
+                                                        <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950" onClick={() => handleSimulateDrain(selectedVehicle.id)}><AlertTriangle className="mr-2 h-4 w-4" />Слив</Button>
                                                     </div>
                                                 )}
                                             </CardContent>
@@ -593,74 +543,48 @@ export default function DashboardPage() {
                                             <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Пробег</p><p className="font-bold text-lg">{analyticsData.vehicleTotalMileage?.toLocaleString('ru-RU')} км</p></div>
                                             <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Стоимость 1 км</p><p className="font-bold text-lg">{analyticsData.vehicleCostPerKm?.toFixed(2)} BYN</p></div>
                                             <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-muted-foreground">Средний расход</p><p className="font-bold text-lg">{analyticsData.vehicleAvgFuelConsumption?.toFixed(1)} л/100км</p></div>
-                                            <div className={`p-3 rounded-lg ${analyticsData.vehicleFuelNormDeviation > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
-                                                <p className={`text-xs ${analyticsData.vehicleFuelNormDeviation > 0 ? 'text-red-600' : 'text-green-600'}`}>Отклонение</p>
-                                                <p className={`font-bold text-lg ${analyticsData.vehicleFuelNormDeviation > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                                            <div className={`p-3 rounded-lg ${analyticsData.vehicleFuelNormDeviation > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+                                                <p className={`text-xs ${analyticsData.vehicleFuelNormDeviation > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>Отклонение</p>
+                                                <p className={`font-bold text-lg ${analyticsData.vehicleFuelNormDeviation > 0 ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}`}>
                                                     {analyticsData.vehicleFuelNormDeviation > 0 ? '+' : ''}{analyticsData.vehicleFuelNormDeviation?.toFixed(1)}%
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="pt-4">
-                                            <div className="flex justify-between items-center">
-                                                <h4 className="font-semibold mb-2">Текущий водитель</h4>
-                                                {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
-                                                    <Button variant="outline" size="sm" onClick={() => setModalState({ type: 'assign-driver', data: selectedVehicle })}><UserCheck className="mr-2 h-4 w-4" />Назначить</Button>
-                                                )}
-                                            </div>
+                                            <div className="flex justify-between items-center"><h4 className="font-semibold mb-2">Текущий водитель</h4>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (<Button variant="outline" size="sm" onClick={() => setModalState({ type: 'assign-driver', data: selectedVehicle })}><UserCheck className="mr-2 h-4 w-4" />Назначить</Button>)}</div>
                                             <p className="text-sm">{currentDriver ? currentDriver.fullName : 'Не закреплен'}</p>
                                         </div>
                                     </div>
 
-                                    
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg">История ремонтов</h3>
                                         <div className="rounded-md border h-[300px] overflow-y-auto">
                                             <Table>
                                                 <TableHeader><TableRow><TableHead>Дата</TableHead><TableHead>Описание</TableHead><TableHead className="text-right">Стоимость</TableHead></TableRow></TableHeader>
-                                                <TableBody>
-                                                    {selectedVehicle.repairs.map((r) => (
-                                                        <TableRow key={r.id} className="hover:bg-muted/50"><TableCell>{r.date}</TableCell><TableCell>{r.description}</TableCell><TableCell className="text-right">{r.cost.toLocaleString('ru-RU')} BYN</TableCell></TableRow>
-                                                    ))}
-                                                </TableBody>
+                                                <TableBody>{selectedVehicle.repairs.map((r) => (<TableRow key={r.id} className="hover:bg-muted/50"><TableCell>{r.date}</TableCell><TableCell>{r.description}</TableCell><TableCell className="text-right">{r.cost.toLocaleString('ru-RU')} BYN</TableCell></TableRow>))}</TableBody>
                                             </Table>
                                         </div>
                                     </div>
-
-                                    
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg">История поездок</h3>
                                         <div className="rounded-md border h-[300px] overflow-y-auto">
                                             <Table>
                                                 <TableHeader><TableRow><TableHead>Дата</TableHead><TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => setTripSortOrder(prev => prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none')}>Пробег <SortIndicator order={tripSortOrder} /></TableHead><TableHead className="text-right">Расход</TableHead></TableRow></TableHeader>
-                                                <TableBody>
-                                                    {sortedTrips.map((t) => {
-                                                        const distance = t.mileageEnd - t.mileageStart;
-                                                        return (
-                                                            <TableRow key={t.id} className="hover:bg-muted/50"><TableCell>{t.date}</TableCell><TableCell className="text-right">{distance} км</TableCell><TableCell className="text-right">{t.fuelUsed.toFixed(1)} л</TableCell></TableRow>
-                                                        );
-                                                    })}
-                                                </TableBody>
+                                                <TableBody>{sortedTrips.map((t) => (<TableRow key={t.id} className="hover:bg-muted/50"><TableCell>{t.date}</TableCell><TableCell className="text-right">{t.mileageEnd - t.mileageStart} км</TableCell><TableCell className="text-right">{t.fuelUsed.toFixed(1)} л</TableCell></TableRow>))}</TableBody>
                                             </Table>
                                         </div>
                                     </div>
                                 </motion.div>
                             ) : (
-                                <div className="text-center py-10 text-muted-foreground bg-muted/30 rounded-lg border border-dashed">
-                                    <p className="mb-2 text-lg">🔍 Обзор всего парка</p>
-                                    <p className="text-sm">Выберите ТС для детального анализа.</p>
-                                </div>
+                                <div className="text-center py-10 text-muted-foreground bg-muted/30 rounded-lg border border-dashed"><p className="mb-2 text-lg">🔍 Обзор всего парка</p><p className="text-sm">Выберите ТС для детального анализа.</p></div>
                             )}
                         </AnimatePresence>
                     </CardContent>
                 </Card>
 
-               
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Card>
-                        <CardHeader className="flex flex-row justify-between items-center">
-                            <CardTitle>Транспортные средства</CardTitle>
-                            {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-vehicle' })}><PlusCircle className="mr-2 h-4 w-4" /> Добавить</Button>}
-                        </CardHeader>
+                        <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Транспортные средства</CardTitle>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-vehicle' })}><PlusCircle className="mr-2 h-4 w-4" /> Добавить</Button>}</CardHeader>
                         <CardContent>
                             <div className="rounded-md border h-[300px] overflow-y-auto">
                                 <Table>
@@ -673,10 +597,7 @@ export default function DashboardPage() {
                                                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem onClick={() => setModalState({ type: 'edit-vehicle', data: v })}>Редактировать</DropdownMenuItem>
-                                                                <DropdownMenuItem className="text-red-600" onClick={() => setModalState({ type: 'delete-vehicle', data: v })}>Удалить</DropdownMenuItem>
-                                                            </DropdownMenuContent>
+                                                            <DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setModalState({ type: 'edit-vehicle', data: v })}>Редактировать</DropdownMenuItem><DropdownMenuItem className="text-red-600" onClick={() => setModalState({ type: 'delete-vehicle', data: v })}>Удалить</DropdownMenuItem></DropdownMenuContent>
                                                         </DropdownMenu>
                                                     </TableCell>
                                                 )}
@@ -689,26 +610,21 @@ export default function DashboardPage() {
                     </Card>
 
                     <Card>
-                        <CardHeader className="flex flex-row justify-between items-center">
-                            <CardTitle>Водители</CardTitle>
-                            {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-driver' })}><UserPlus className="mr-2 h-4 w-4" /> Добавить</Button>}
-                        </CardHeader>
+                        <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Водители</CardTitle>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-driver' })}><UserPlus className="mr-2 h-4 w-4" /> Добавить</Button>}</CardHeader>
                         <CardContent>
                             <div className="rounded-md border h-[300px] overflow-y-auto">
                                 <Table>
-                                    <TableHeader><TableRow><TableHead>ФИО</TableHead><TableHead>Контакт</TableHead>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <TableHead className="text-right">Действия</TableHead>}</TableRow></TableHeader>
+                                    <TableHeader><TableRow><TableHead>ФИО</TableHead><TableHead>Контакт</TableHead><TableHead>Статус</TableHead>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <TableHead className="text-right">Действия</TableHead>}</TableRow></TableHeader>
                                     <TableBody>
                                         {drivers.map((d) => (
                                             <TableRow key={d.id} className="hover:bg-muted/50">
                                                 <TableCell>{d.fullName}</TableCell><TableCell>{d.contact}</TableCell>
+                                                <TableCell>{d.assignedVehicleId ? (<span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs rounded-md">В работе</span>) : (<span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 text-xs rounded-md">Свободен</span>)}</TableCell>
                                                 {(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && (
                                                     <TableCell className="text-right">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem onClick={() => setModalState({ type: 'edit-driver', data: d })}>Редактировать</DropdownMenuItem>
-                                                                <DropdownMenuItem className="text-red-600" onClick={() => setModalState({ type: 'delete-driver', data: d })}>Удалить</DropdownMenuItem>
-                                                            </DropdownMenuContent>
+                                                            <DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setModalState({ type: 'edit-driver', data: d })}>Редактировать</DropdownMenuItem><DropdownMenuItem className="text-red-600" onClick={() => setModalState({ type: 'delete-driver', data: d })}>Удалить</DropdownMenuItem></DropdownMenuContent>
                                                         </DropdownMenu>
                                                     </TableCell>
                                                 )}
@@ -723,59 +639,21 @@ export default function DashboardPage() {
             </motion.main>
             <div className="fixed bottom-8 left-8 z-50"><ThemeToggle /></div>
 
+            {/* Модалки */}
             <Dialog open={modalState.type === 'add-destination'} onOpenChange={() => { setModalState({ type: null }); setDestLat(''); setDestLon(''); }}>
-                <DialogContent className="sm:max-w-[600px]">
-                    <form onSubmit={handleFormSubmit}>
-                        <DialogHeader><DialogTitle>Добавить пункт назначения</DialogTitle></DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Название</Label>
-                                <Input name="name" className="col-span-3" placeholder='Склад "Восточный"' required />
-                            </div>
-                            
-                            <div className="col-span-4 h-[250px] rounded-md overflow-hidden border">
-                                <MapContainer center={[53.9045, 27.5615]} zoom={11} style={{ height: '100%', width: '100%' }}>
-                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                                    <LocationPickerEvents onLocationSelect={(lat, lon) => {
-                                        setDestLat(Number(lat.toFixed(4)));
-                                        setDestLon(Number(lon.toFixed(4)));
-                                    }} />
-                                    {destLat !== '' && destLon !== '' && (
-                                        <Marker position={[Number(destLat), Number(destLon)]} />
-                                    )}
-                                </MapContainer>
-                            </div>
-                            <p className="text-xs text-muted-foreground text-center col-span-4 mt-[-10px]">
-                                Кликните на карту, чтобы выбрать координаты пункта
-                            </p>
-
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Широта (Lat)</Label>
-                                <Input name="lat" type="number" step="0.0001" className="col-span-3" value={destLat} onChange={(e) => setDestLat(Number(e.target.value))} required />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Долгота (Lon)</Label>
-                                <Input name="lon" type="number" step="0.0001" className="col-span-3" value={destLon} onChange={(e) => setDestLon(Number(e.target.value))} required />
-                            </div>
-                        </div>
-                        <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
-                    </form>
-                </DialogContent>
+                <DialogContent className="sm:max-w-[600px]"><form onSubmit={handleFormSubmit}><DialogHeader><DialogTitle>Добавить пункт назначения</DialogTitle></DialogHeader><div className="grid gap-4 py-4"><div className="flex flex-col gap-2"><Label className="text-left font-semibold text-md ml-1">Название пункта</Label><Input name="name" className="w-full" placeholder='Например: Склад "Восточный"' required /></div><div className="w-full h-[250px] rounded-md overflow-hidden border"><PickerMap destLat={destLat} destLon={destLon} onLocationSelect={(lat, lon) => { setDestLat(Number(lat.toFixed(4))); setDestLon(Number(lon.toFixed(4))); }} /></div><p className="text-xs text-muted-foreground text-center mt-[-10px]">Кликните на карту, чтобы выбрать координаты пункта</p><div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-2"><Label className="text-left">Широта (Lat)</Label><Input name="lat" type="number" step="0.0001" value={destLat} onChange={(e) => setDestLat(Number(e.target.value))} required /></div><div className="flex flex-col gap-2"><Label className="text-left">Долгота (Lon)</Label><Input name="lon" type="number" step="0.0001" value={destLon} onChange={(e) => setDestLon(Number(e.target.value))} required /></div></div></div><DialogFooter><Button type="submit">Сохранить</Button></DialogFooter></form></DialogContent>
             </Dialog>
 
             <Dialog open={modalState.type === 'simulate-trip'} onOpenChange={() => setModalState({ type: null })}>
                 <DialogContent>
                     <form onSubmit={startTripSimulation}>
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center text-blue-600"><Navigation className="mr-2 h-5 w-5" /> Симуляция рейса</DialogTitle>
-                            <DialogDescription>Машина поедет по реальным дорогам до выбранной точки.</DialogDescription>
-                        </DialogHeader>
+                        <DialogHeader><DialogTitle className="flex items-center text-blue-600"><Navigation className="mr-2 h-5 w-5" /> Симуляция рейса</DialogTitle><DialogDescription>Машина поедет по реальным дорогам до выбранной точки.</DialogDescription></DialogHeader>
                         <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label className="text-right">Транспорт</Label>
                                 <Select required value={simulateTripData.vehicleId} onValueChange={(val) => setSimulateTripData({ ...simulateTripData, vehicleId: val })}>
                                     <SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите машину" /></SelectTrigger>
-                                    <SelectContent>{vehicles.filter((v) => v.status !== 'В ПУТИ').map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber}</SelectItem>)}</SelectContent>
+                                    <SelectContent>{vehicles.filter((v) => v.status !== 'В ПУТИ' && !activeRoutes[v.id]).map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
@@ -796,17 +674,8 @@ export default function DashboardPage() {
                     <form onSubmit={handleRefuelSubmit}>
                         <DialogHeader><DialogTitle className="flex items-center text-blue-600"><Droplet className="mr-2 h-5 w-5" /> Заправка ТС</DialogTitle></DialogHeader>
                         <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Транспорт</Label>
-                                <Select required value={refuelData.vehicleId} onValueChange={(val) => setRefuelData({ ...refuelData, vehicleId: val })}>
-                                    <SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите машину" /></SelectTrigger>
-                                    <SelectContent>{vehicles.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber} (Сейчас: {v.currentFuelLevel?.toFixed(1) || 0} л)</SelectItem>)}</SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label className="text-right">Количество</Label>
-                                <Input type="number" step="0.1" required className="col-span-3" placeholder="Литры" value={refuelData.amount} onChange={(e) => setRefuelData({ ...refuelData, amount: e.target.value })} />
-                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Транспорт</Label><Select required value={refuelData.vehicleId} onValueChange={(val) => setRefuelData({ ...refuelData, vehicleId: val })}><SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите машину" /></SelectTrigger><SelectContent>{vehicles.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber} (Сейчас: {v.currentFuelLevel?.toFixed(1) || 0} л)</SelectItem>)}</SelectContent></Select></div>
+                            <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Количество</Label><Input type="number" step="0.1" required className="col-span-3" placeholder="Литры" value={refuelData.amount} onChange={(e) => setRefuelData({ ...refuelData, amount: e.target.value })} /></div>
                         </div>
                         <DialogFooter><Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white">Заправить</Button></DialogFooter>
                     </form>
@@ -853,7 +722,7 @@ export default function DashboardPage() {
                             <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Гос. номер</Label><Input name="plateNumber" defaultValue={(modalState.data as Vehicle)?.plateNumber} className="col-span-3" required /></div>
                             <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Модель</Label><Input name="model" defaultValue={(modalState.data as Vehicle)?.model} className="col-span-3" required /></div>
                             <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Год выпуска</Label><Input name="year" type="number" defaultValue={(modalState.data as Vehicle)?.year} className="col-span-3" required /></div>
-                            <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Норма ГСМ</Label><Input name="fuelNorm" type="number" step="0.1" defaultValue={(modalState.data as Vehicle)?.fuelNorm} className="col-span-3" required /></div>
+                            <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Норма ГСМ</Label><Input name="fuelNorm" type="text" defaultValue={(modalState.data as Vehicle)?.fuelNorm} placeholder="Например: 28.5" className="col-span-3" required /></div>
                         </div>
                         <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
                     </form>
@@ -867,7 +736,19 @@ export default function DashboardPage() {
                         <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">ФИО</Label><Input name="fullName" defaultValue={(modalState.data as Driver)?.fullName} className="col-span-3" required /></div>
                             <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Контакт</Label><Input name="contact" defaultValue={(modalState.data as Driver)?.contact} className="col-span-3" /></div>
-                            <div className="grid grid-cols-4 items-center gap-4"><Label className="text-right">Закрепить ТС</Label><Select name="assignedVehicleId" defaultValue={(modalState.data as Driver)?.assignedVehicleId ? String((modalState.data as Driver)?.assignedVehicleId) : 'none'}><SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите ТС" /></SelectTrigger><SelectContent><SelectItem value="none">Не закреплен</SelectItem>{vehicles.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.plateNumber}</SelectItem>)}</SelectContent></Select></div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label className="text-right">Закрепить ТС</Label>
+                                <Select name="assignedVehicleId" defaultValue={(modalState.data as Driver)?.assignedVehicleId ? String((modalState.data as Driver)?.assignedVehicleId) : 'none'}>
+                                    <SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите ТС" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Не закреплен</SelectItem>
+                                        {vehicles.map((v) => {
+                                            const isTaken = drivers.some(d => d.assignedVehicleId === v.id && d.id !== (modalState.data as Driver)?.id);
+                                            return <SelectItem key={v.id} value={String(v.id)} disabled={isTaken}>{v.plateNumber} {isTaken ? '(Занято)' : ''}</SelectItem>;
+                                        })}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <DialogFooter><Button type="submit">Сохранить</Button></DialogFooter>
                     </form>
@@ -885,7 +766,11 @@ export default function DashboardPage() {
                                     <SelectTrigger className="col-span-3"><SelectValue placeholder="Выберите водителя" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">Открепить водителя</SelectItem>
-                                        {drivers.map((d) => <SelectItem key={d.id} value={String(d.id)}>{d.fullName}</SelectItem>)}
+                                        {drivers.map((d) => (
+                                            <SelectItem key={d.id} value={String(d.id)} disabled={d.assignedVehicleId !== null && d.assignedVehicleId !== Number(selectedVehicleId)}>
+                                                {d.fullName} {d.assignedVehicleId && d.assignedVehicleId !== Number(selectedVehicleId) ? '(В работе)' : ''}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>

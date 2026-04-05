@@ -8,7 +8,7 @@ import by.pavel.transportanalytics.repository.DriverRepository;
 import by.pavel.transportanalytics.repository.VehicleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict; // <-- Добавлен импорт
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +60,17 @@ public class VehicleServiceImpl implements VehicleService {
         existingVehicle.setModel(vehicleDto.getModel());
         existingVehicle.setYear(vehicleDto.getYear());
         existingVehicle.setFuelNorm(vehicleDto.getFuelNorm());
+
+        // РЕШЕНИЕ ПРОБЛЕМЫ НЕ-АДМИНОВ: Теперь бэкенд умеет обновлять и сохранять координаты
+        if (vehicleDto.getLastLatitude() != null) {
+            existingVehicle.setLastLatitude(vehicleDto.getLastLatitude());
+        }
+        if (vehicleDto.getLastLongitude() != null) {
+            existingVehicle.setLastLongitude(vehicleDto.getLastLongitude());
+        }
+        if (vehicleDto.getCurrentFuelLevel() != null) {
+            existingVehicle.setCurrentFuelLevel(vehicleDto.getCurrentFuelLevel());
+        }
 
         Vehicle updatedVehicle = vehicleRepository.save(existingVehicle);
         return convertToDto(updatedVehicle);
@@ -135,6 +146,10 @@ public class VehicleServiceImpl implements VehicleService {
         vehicle.setModel(dto.getModel());
         vehicle.setYear(dto.getYear());
         vehicle.setFuelNorm(dto.getFuelNorm());
+        vehicle.setCurrentFuelLevel(dto.getCurrentFuelLevel() != null ? dto.getCurrentFuelLevel() : 100.0);
+        vehicle.setLastLatitude(dto.getLastLatitude() != null ? dto.getLastLatitude() : 53.9061);
+        vehicle.setLastLongitude(dto.getLastLongitude() != null ? dto.getLastLongitude() : 27.9564);
+        vehicle.setStatus(dto.getStatus() != null ? dto.getStatus() : "СВОБОДЕН");
         return vehicle;
     }
 }
