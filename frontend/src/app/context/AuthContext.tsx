@@ -2,23 +2,24 @@
 
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import axios from 'axios';
+import { analytics } from '@/lib/analyticsService'; // <-- ИМПОРТ АНАЛИТИКИ
 
 axios.defaults.withCredentials = true;
 
 interface User {
-  username: string;
-  roles: string[];
-  role?: string; // Добавлено для совместимости с OAuth
-  avatarUrl?: string; // Добавлено для картинки Google
+    username: string;
+    roles: string[];
+    role?: string;
+    avatarUrl?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  loginWithGoogle: () => void; // Добавлена функция входа через Google
+    user: User | null;
+    isLoading: boolean;
+    login: (username: string, password: string) => Promise<void>;
+    register: (username: string, password: string) => Promise<void>;
+    logout: () => Promise<void>;
+    loginWithGoogle: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,7 +31,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         const checkUserStatus = async () => {
             try {
-                // Изменен путь на /api/auth/me (наш новый контроллер с OAuth)
                 const response = await axios.get('http://localhost:8080/api/auth/me');
                 setUser(response.data);
             } catch {
@@ -45,27 +45,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const login = async (username: string, password: string) => {
-        const params = new URLSearchParams();
-        params.append('username', username);
-        params.append('password', password);
-        
-        await axios.post('http://localhost:8080/api/auth/login', params);
-        
-        // Изменен путь на /api/auth/me
-        const response = await axios.get('http://localhost:8080/api/auth/me');
-        setUser(response.data);
+        const startTime = Date.now(); // Старт замера времени авторизации
+        try {
+            const params = new URLSearchParams();
+            params.append('username', username);
+            params.append('password', password);
+
+            await axios.post('http://localhost:8080/api/auth/login', params);
+
+            const response = await axios.get('http://localhost:8080/api/auth/me');
+            setUser(response.data);
+
+            const duration = Date.now() - startTime;
+            // АНАЛИТИКА: Успешная авторизация
+            analytics.trackEvent('Конверсия', 'auth_success', { auth_duration: duration });
+        } catch (error: any) {
+            // АНАЛИТИКА: Ошибка API
+            analytics.trackEvent('Системные события', 'api_request_fail', {
+                status_code: error.response?.status || 500,
+                endpoint_path: '/api/auth/login'
+            });
+            throw error;
+        }
     };
 
     const register = async (username: string, password: string) => {
-        await axios.post('http://localhost:8080/api/auth/register', { username, password });
+        try {
+            await axios.post('http://localhost:8080/api/auth/register', { username, password });
+        } catch (error: any) {
+            analytics.trackEvent('Системные события', 'api_request_fail', {
+                status_code: error.response?.status || 500,
+                endpoint_path: '/api/auth/register'
+            });
+            throw error;
+        }
     };
-    
+
     const logout = async () => {
         await axios.post('http://localhost:8080/api/auth/logout');
         setUser(null);
     };
 
-    // Добавлена функция редиректа на Google OAuth
     const loginWithGoogle = () => {
         window.location.href = 'http://localhost:8080/oauth2/authorization/google';
     };

@@ -6,7 +6,6 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Vehicle } from '@/types';
 
-// Fix для стандартных иконок leaflet, если где-то используются
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -42,57 +41,48 @@ interface MapProps {
     vehicles: Vehicle[];
     selectedVehicleId: number | null;
     onVehicleSelect: (id: string | null) => void;
-    activeRoute?: [number, number][];
-    simulatedPosition?: { vehicleId: number; lat: number; lon: number } | null;
+    activeRoutes?: Record<number, [number, number][]>;
+    simulatedPositions?: Record<number, { lat: number; lon: number }>;
 }
 
-// Контроллер событий: зум и клик по пустому месту
 function MapEventsController({ onMapClick }: { onMapClick: () => void }) {
-    useMapEvents({
-        click: () => {
-            onMapClick(); // Сбрасываем фокус при клике на пустое место (Проблема 12)
-        }
-    });
+    useMapEvents({ click: () => onMapClick() });
     return null;
 }
 
 function MapCameraController({ 
     vehicles, 
     selectedVehicleId, 
-    activeRoute,
-    simulatedPosition
-}: { 
-    vehicles: Vehicle[], 
-    selectedVehicleId: number | null, 
-    activeRoute?: [number, number][],
-    simulatedPosition?: { vehicleId: number; lat: number; lon: number } | null
-}) {
+    activeRoutes,
+    simulatedPositions
+}: MapProps) {
     const map = useMap();
     const [isCameraLocked, setIsCameraLocked] = useState(false);
     const [lastSelected, setLastSelected] = useState<number | null>(null);
 
     useEffect(() => {
-        if (activeRoute && activeRoute.length > 0) {
+        const selectedRoute = selectedVehicleId ? activeRoutes?.[selectedVehicleId] : undefined;
+        if (selectedRoute && selectedRoute.length > 0) {
             setIsCameraLocked(false); 
-            const bounds = L.latLngBounds(activeRoute);
+            const bounds = L.latLngBounds(selectedRoute);
             map.fitBounds(bounds, { padding: [50, 50], animate: true, duration: 1.0 });
         }
-    }, [activeRoute, map]);
+    }, [activeRoutes, selectedVehicleId, map]);
 
     useEffect(() => {
         if (selectedVehicleId !== lastSelected) {
             setLastSelected(selectedVehicleId);
+            const selectedRoute = selectedVehicleId ? activeRoutes?.[selectedVehicleId] : undefined;
             
-            if (selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
+            if (selectedVehicleId && !selectedRoute) {
                 setIsCameraLocked(true); 
                 const v = vehicles.find(v => v.id === selectedVehicleId);
-                const lat = simulatedPosition?.vehicleId === selectedVehicleId ? simulatedPosition.lat : v?.lastLatitude;
-                const lon = simulatedPosition?.vehicleId === selectedVehicleId ? simulatedPosition.lon : v?.lastLongitude;
+                const simPos = simulatedPositions?.[selectedVehicleId];
+                const lat = simPos ? simPos.lat : v?.lastLatitude;
+                const lon = simPos ? simPos.lon : v?.lastLongitude;
                 
-                if (lat && lon) {
-                    map.flyTo([lat, lon], 14, { duration: 1.0 });
-                }
-            } else if (!selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
+                if (lat && lon) map.flyTo([lat, lon], 14, { duration: 1.0 });
+            } else if (!selectedVehicleId) {
                 setIsCameraLocked(false);
                 const validCoords = vehicles.filter(v => v.lastLatitude && v.lastLongitude)
                                             .map(v => [v.lastLatitude!, v.lastLongitude!] as [number, number]);
@@ -101,19 +91,19 @@ function MapCameraController({
                 }
             }
         }
-    }, [selectedVehicleId, lastSelected, map, vehicles, activeRoute, simulatedPosition]);
+    }, [selectedVehicleId, lastSelected, map, vehicles, activeRoutes, simulatedPositions]);
 
     useEffect(() => {
-        if (isCameraLocked && selectedVehicleId && (!activeRoute || activeRoute.length === 0)) {
+        const selectedRoute = selectedVehicleId ? activeRoutes?.[selectedVehicleId] : undefined;
+        if (isCameraLocked && selectedVehicleId && !selectedRoute) {
             const v = vehicles.find(v => v.id === selectedVehicleId);
-            const lat = simulatedPosition?.vehicleId === selectedVehicleId ? simulatedPosition.lat : v?.lastLatitude;
-            const lon = simulatedPosition?.vehicleId === selectedVehicleId ? simulatedPosition.lon : v?.lastLongitude;
+            const simPos = simulatedPositions?.[selectedVehicleId];
+            const lat = simPos ? simPos.lat : v?.lastLatitude;
+            const lon = simPos ? simPos.lon : v?.lastLongitude;
             
-            if (lat && lon) {
-                map.setView([lat, lon], map.getZoom(), { animate: false });
-            }
+            if (lat && lon) map.setView([lat, lon], map.getZoom(), { animate: false });
         }
-    }, [vehicles, isCameraLocked, selectedVehicleId, map, activeRoute, simulatedPosition]);
+    }, [vehicles, isCameraLocked, selectedVehicleId, map, activeRoutes, simulatedPositions]);
 
     useEffect(() => {
         const disableLock = () => setIsCameraLocked(false);
@@ -128,46 +118,39 @@ function MapCameraController({
     return null;
 }
 
-export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSelect, activeRoute, simulatedPosition }: MapProps) {
+export default function MapComponent(props: MapProps) {
+    const { vehicles, selectedVehicleId, onVehicleSelect, activeRoutes, simulatedPositions } = props;
     const [mapKey, setMapKey] = useState<string>('');
 
-    useEffect(() => {
-        // Генерируем уникальный ключ при монтировании на клиенте
-        setMapKey(Date.now().toString());
-    }, []);
+    useEffect(() => { setMapKey(Date.now().toString()); }, []);
 
-    // Ждем монтирования
     if (!mapKey || typeof window === 'undefined') {
         return <div className="h-full w-full bg-muted/20 animate-pulse flex items-center justify-center rounded-md border">Загрузка карты автопарка...</div>;
     }
 
     return (
         <MapContainer key={`main-map-${mapKey}`} center={[53.9045, 27.5615]} zoom={10} style={{ height: '100%', width: '100%', zIndex: 0 }}>
-            <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; OpenStreetMap contributors'
-            />
-            
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
             <MapEventsController onMapClick={() => onVehicleSelect(null)} />
+            <MapCameraController {...props} />
 
-            <MapCameraController 
-                vehicles={vehicles} 
-                selectedVehicleId={selectedVehicleId} 
-                activeRoute={activeRoute}
-                simulatedPosition={simulatedPosition}
-            />
-
-            {activeRoute && activeRoute.length > 0 && (
-                <Polyline positions={activeRoute} color="#3b82f6" weight={6} opacity={0.8} />
-            )}
+            {/* Рендерим маршруты для всех машин в пути */}
+            {Object.entries(activeRoutes || {}).map(([vId, routeCoords]) => (
+                <Polyline 
+                    key={`route-${vId}`} 
+                    positions={routeCoords} 
+                    color={selectedVehicleId === Number(vId) ? "#dc2626" : "#3b82f6"} 
+                    weight={selectedVehicleId === Number(vId) ? 8 : 4} 
+                    opacity={0.8} 
+                />
+            ))}
 
             {vehicles.map(vehicle => {
-                const isSimulatingThis = simulatedPosition?.vehicleId === vehicle.id;
-                const lat = isSimulatingThis ? simulatedPosition.lat : vehicle.lastLatitude;
-                const lon = isSimulatingThis ? simulatedPosition.lon : vehicle.lastLongitude;
+                const simPos = simulatedPositions?.[vehicle.id];
+                const lat = simPos ? simPos.lat : vehicle.lastLatitude;
+                const lon = simPos ? simPos.lon : vehicle.lastLongitude;
 
                 if (!lat || !lon) return null;
-                
                 const isSelected = selectedVehicleId === vehicle.id;
 
                 return (
@@ -176,20 +159,14 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
                         position={[lat, lon]} 
                         icon={createVehicleIcon(isSelected)}
                         zIndexOffset={isSelected ? 1000 : 0}
-                        eventHandlers={{ 
-                            click: (e) => {
-                                L.DomEvent.stopPropagation(e);
-                                onVehicleSelect(vehicle.id.toString());
-                            } 
-                        }}
+                        eventHandlers={{ click: (e) => { L.DomEvent.stopPropagation(e); onVehicleSelect(vehicle.id.toString()); } }}
                     >
                         <Popup>
                             <div className="font-bold text-lg">{vehicle.plateNumber}</div>
                             <div className="text-sm text-gray-600">{vehicle.model}</div>
                             <div className="text-blue-600 font-semibold mt-2 flex items-center">
-                                💧 Бак: {vehicle.currentFuelLevel?.toFixed(1) || 0} л.
+                                💧 Бак: {simPos ? vehicles.find(v=>v.id===vehicle.id)?.currentFuelLevel?.toFixed(1) : vehicle.currentFuelLevel?.toFixed(1) || 0} л.
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">Кликни, чтобы камера следила</div>
                         </Popup>
                     </Marker>
                 );
@@ -200,31 +177,14 @@ export default function MapComponent({ vehicles, selectedVehicleId, onVehicleSel
 
 export function PickerMap({ onLocationSelect, destLat, destLon }: { onLocationSelect: (lat: number, lng: number) => void, destLat: number | '', destLon: number | '' }) {
     const [mapKey, setMapKey] = useState<string>('');
-
-    useEffect(() => {
-        setMapKey(Date.now().toString());
-    }, []);
-
-    function Events() {
-        useMapEvents({
-            click(e) {
-                onLocationSelect(e.latlng.lat, e.latlng.lng);
-            },
-        });
-        return null;
-    }
-
-    if (!mapKey || typeof window === 'undefined') {
-        return <div className="h-full w-full bg-muted/20 animate-pulse flex items-center justify-center rounded-md border">Загрузка мини-карты...</div>;
-    }
-
+    useEffect(() => { setMapKey(Date.now().toString()); }, []);
+    function Events() { useMapEvents({ click(e) { onLocationSelect(e.latlng.lat, e.latlng.lng); } }); return null; }
+    if (!mapKey || typeof window === 'undefined') return <div className="h-full w-full bg-muted/20 animate-pulse flex items-center justify-center rounded-md border">Загрузка мини-карты...</div>;
     return (
         <MapContainer key={`picker-map-${mapKey}`} center={[53.9045, 27.5615]} zoom={11} style={{ height: '100%', width: '100%' }}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <Events />
-            {destLat !== '' && destLon !== '' && (
-                <Marker position={[Number(destLat), Number(destLon)]} />
-            )}
+            {destLat !== '' && destLon !== '' && <Marker position={[Number(destLat), Number(destLon)]} />}
         </MapContainer>
     );
 }

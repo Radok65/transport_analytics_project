@@ -4,8 +4,6 @@ import { useState, useEffect, useMemo, FormEvent, JSX, useRef } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-// Решение проблем с window is not defined (Проблема 1, 2)
 import dynamic from 'next/dynamic';
 import { useStore } from '@/store/useStore';
 
@@ -26,8 +24,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { DashboardCharts } from '@/components/DashboardCharts';
 import api, { Vehicle, Driver, Destination, AnalyticsData } from '@/lib/apiService';
 import axios from 'axios';
+import { analytics } from '@/lib/analyticsService'; // <-- ИМПОРТ АНАЛИТИКИ
 
-// Динамические импорты карт без SSR
 const VehicleMap = dynamic(() => import('@/components/MapComponent'), { ssr: false, loading: () => <div className="h-full w-full bg-muted/20 animate-pulse rounded-md border flex items-center justify-center">Загрузка карты...</div> });
 const PickerMap = dynamic(() => import('@/components/MapComponent').then(mod => mod.PickerMap), { ssr: false });
 
@@ -42,7 +40,6 @@ const SortIndicator = ({ order }: { order: 'asc' | 'desc' | 'none' }): JSX.Eleme
     return <ArrowUpDown className="inline ml-2 h-4 w-4 text-muted-foreground/50" />;
 };
 
-// Функция для расчета дистанции (Haversine formula) для динамической скорости
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     const R = 6371;
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -68,13 +65,32 @@ export default function DashboardPage() {
     const [destLat, setDestLat] = useState<number | ''>('');
     const [destLon, setDestLon] = useState<number | ''>('');
 
-    // Словари для поддержки симуляции множества машин одновременно
     const [activeRoutes, setActiveRoutes] = useState<Record<number, [number, number][]>>({});
     const [simulatedPositions, setSimulatedPositions] = useState<Record<number, { lat: number, lon: number }>>({});
 
     const [simulateTripData, setSimulateTripData] = useState({ vehicleId: '', destinationId: '' });
     const [refuelData, setRefuelData] = useState({ vehicleId: '', amount: '' });
     const [tripFormData, setTripFormData] = useState({ date: new Date().toISOString().split('T')[0], driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '' });
+
+    // АНАЛИТИКА: dashboard_view
+    useEffect(() => {
+        if (isMounted && user) {
+            analytics.trackEvent('Просмотры экранов', 'dashboard_view', {
+                user_role: user?.roles?.[0] || user?.role || 'User',
+                refresh_type: 'auto'
+            });
+        }
+    }, [isMounted, user]);
+
+    // АНАЛИТИКА: vehicle_card_view
+    useEffect(() => {
+        if (selectedVehicleId && selectedVehicleId !== 'all') {
+            analytics.trackEvent('Просмотры экранов', 'vehicle_card_view', {
+                vehicle_id: selectedVehicleId,
+                entry_point: 'list'
+            });
+        }
+    }, [selectedVehicleId]);
 
     useEffect(() => {
         setIsMounted(true);
@@ -93,7 +109,6 @@ export default function DashboardPage() {
         let interval: NodeJS.Timeout;
         if (user && isMounted) {
             interval = setInterval(() => {
-                // Тихое обновление каждые 2 секунды (вместо 5), чтобы пользователи видели движение фуры чаще
                 fetchBaseData(setSelectedVehicleId);
                 fetchAnalytics(activeVehicleIdRef.current);
             }, 2000);
@@ -128,23 +143,21 @@ export default function DashboardPage() {
         return <Cloud className="mr-2 h-5 w-5 text-gray-500" />;
     };
 
-    // Исправлено: Слив топлива теперь обновляет данные самой машины
     const handleSimulateDrain = async (vehicleId: number) => {
+        // АНАЛИТИКА: Имитация срабатывания алерта
+        analytics.trackEvent('Системные события', 'threshold_alert', { alert_type: 'fuel_drain', deviation_val: 15 });
         const vehicle = vehicles.find((v) => v.id === vehicleId);
         if (!vehicle) return;
         try {
             const newFuel = Math.max(0, (vehicle.currentFuelLevel || 50) - 15);
-            // Отправляем телематику для генерации инцидента
             await api.sendTelematicsData({ vehicleId, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: newFuel });
-
-            // ПРИНУДИТЕЛЬНО обновляем сущность авто, чтобы топливо изменилось в UI
             await api.updateVehicle(vehicleId, { ...vehicle, currentFuelLevel: newFuel });
-
             fetchBaseData(setSelectedVehicleId);
         } catch (error) { }
     };
 
     const handleSimulateSpeeding = async (vehicleId: number) => {
+        analytics.trackEvent('Системные события', 'threshold_alert', { alert_type: 'speeding', deviation_val: 110 });
         const vehicle = vehicles.find((v) => v.id === vehicleId);
         if (!vehicle) return;
         try {
@@ -153,7 +166,6 @@ export default function DashboardPage() {
         } catch (error) { }
     };
 
-    // Исправлено: Заправка теперь тоже обновляет данные самой машины
     const handleRefuelSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const vehicle = vehicles.find((v) => v.id === Number(refuelData.vehicleId));
@@ -161,10 +173,7 @@ export default function DashboardPage() {
         const newFuel = (vehicle.currentFuelLevel || 0) + Number(refuelData.amount);
         try {
             await api.sendTelematicsData({ vehicleId: vehicle.id, latitude: vehicle.lastLatitude || 53.9045, longitude: vehicle.lastLongitude || 27.5615, speed: 0, fuelLevel: newFuel });
-
-            // ПРИНУДИТЕЛЬНО обновляем сущность авто
             await api.updateVehicle(vehicle.id, { ...vehicle, currentFuelLevel: newFuel });
-
             fetchBaseData(setSelectedVehicleId);
             setModalState({ type: null });
             setRefuelData({ vehicleId: '', amount: '' });
@@ -185,40 +194,32 @@ export default function DashboardPage() {
         const vehicle = vehicles.find(v => v.id === vehicleId);
         const driver = drivers.find((d) => d.assignedVehicleId === vehicleId);
 
-        // Проверка наличия водителя перед отправкой в рейс
         if (!driver) {
             alert("Ошибка: Нельзя отправить в рейс фуру без закрепленного водителя!");
             return;
         }
 
         if (!vehicle) return;
-
         setModalState({ type: null });
 
         try {
             const res = await api.startSimulation(vehicleId, destinationId);
             const data = res.data;
-
             if (!data.success) return;
 
             setSelectedVehicleId(String(vehicleId));
-
-            // Сохраняем маршрут в словарь для конкретной машины
             setActiveRoutes(prev => ({ ...prev, [vehicleId]: data.pathPoints }));
-
             if (api.updateVehicleStatus) await api.updateVehicleStatus(vehicleId, "В ПУТИ");
 
             const frames = data.pathPoints.length;
             const stepFuel = data.fuelNeeded / frames;
             let currentFuel = data.currentFuel;
 
-            // Асинхронный цикл симуляции: выполняется в фоне, позволяет запускать другие фуры
             (async () => {
                 try {
                     for (let i = 0; i < frames; i++) {
                         const [lat, lon] = data.pathPoints[i];
                         currentFuel -= stepFuel;
-
                         setSimulatedPositions(prev => ({ ...prev, [vehicleId]: { lat, lon } }));
 
                         let delay = 100;
@@ -229,18 +230,9 @@ export default function DashboardPage() {
                         }
 
                         if (i % 3 === 0 || i === frames - 1) {
-                            // Отправляем телематику
                             api.sendTelematicsData({ vehicleId, latitude: lat, longitude: lon, speed: 85, fuelLevel: currentFuel }).catch(() => { });
-
-                            // Сохраняем координаты в саму машину, чтобы не-админы тоже видели движение
-                            api.updateVehicle(vehicleId, {
-                                ...vehicle,
-                                lastLatitude: lat,
-                                lastLongitude: lon,
-                                currentFuelLevel: currentFuel
-                            }).catch(() => { });
+                            api.updateVehicle(vehicleId, { ...vehicle, lastLatitude: lat, lastLongitude: lon, currentFuelLevel: currentFuel }).catch(() => { });
                         }
-
                         await new Promise((resolve) => setTimeout(resolve, delay));
                     }
 
@@ -261,13 +253,11 @@ export default function DashboardPage() {
                     console.error("Ошибка цикла симуляции", err);
                 } finally {
                     if (api.updateVehicleStatus) try { await api.updateVehicleStatus(vehicleId, "СВОБОДЕН"); } catch (e) { }
-                    // Очищаем маршрут и позицию для конкретной машины после завершения
                     setActiveRoutes(prev => { const next = { ...prev }; delete next[vehicleId]; return next; });
                     setSimulatedPositions(prev => { const next = { ...prev }; delete next[vehicleId]; return next; });
                     fetchBaseData(setSelectedVehicleId);
                 }
             })();
-
         } catch (err) {
             console.error("Simulation error", err);
             alert("Ошибка старта симуляции");
@@ -282,18 +272,33 @@ export default function DashboardPage() {
     };
 
     const handleSummaryExportPDF = async () => {
-        try { const response = await api.downloadSummaryReport(); downloadBlob(response, 'fleet_summary.pdf'); } catch (error) { }
+        // АНАЛИТИКА: Инициация экспорта
+        analytics.trackEvent('Взаимодействие', 'export_initiate', { file_format: 'pdf', page_orientation: 'portrait' });
+        try {
+            const response = await api.downloadSummaryReport();
+            downloadBlob(response, 'fleet_summary.pdf');
+            // АНАЛИТИКА: Успешное скачивание
+            analytics.trackEvent('Конверсия', 'report_download', { range_days: 30 });
+        } catch (error: any) {
+            analytics.trackEvent('Системные события', 'api_request_fail', { status_code: error.response?.status || 500, endpoint_path: '/reports/summary' });
+        }
     };
 
     const handleDetailedExportPDF = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        // АНАЛИТИКА: Инициация экспорта
+        analytics.trackEvent('Взаимодействие', 'export_initiate', { file_format: 'pdf', page_orientation: 'portrait' });
         const fd = new FormData(e.currentTarget); const vId = fd.get('vehicleId') as string;
         try {
             const vehicle = vehicles.find(v => v.id.toString() === vId);
             const response = await api.downloadVehicleReport(vId);
             downloadBlob(response, `detailed_report_${vehicle?.plateNumber || vId}.pdf`);
             setModalState({ type: null });
-        } catch (error) { }
+            // АНАЛИТИКА: Успешное скачивание
+            analytics.trackEvent('Конверсия', 'report_download', { range_days: 30 });
+        } catch (error: any) {
+            analytics.trackEvent('Системные события', 'api_request_fail', { status_code: error.response?.status || 500, endpoint_path: '/reports/vehicle' });
+        }
     };
 
     const handleTripVehicleChange = (vId: string) => {
@@ -312,19 +317,21 @@ export default function DashboardPage() {
             switch (modalState.type) {
                 case 'add-destination':
                     await api.createDestination({ name: String(vals.name), latitude: Number(vals.lat), longitude: Number(vals.lon) });
-                    setDestLat('');
-                    setDestLon('');
+                    setDestLat(''); setDestLon('');
                     break;
                 case 'add-trip':
                     await api.createTrip(Number(tripFormData.vehicleId), { ...tripFormData, mileageStart: Number(tripFormData.mileageStart), mileageEnd: Number(tripFormData.mileageEnd), fuelUsed: Number(tripFormData.fuelUsed) });
+                    // АНАЛИТИКА: Путевой лист сохранен
+                    analytics.trackEvent('Конверсия', 'waybill_save_done', { vehicle_id: tripFormData.vehicleId });
                     setTripFormData({ date: new Date().toISOString().split('T')[0], driverId: '', vehicleId: '', mileageStart: '', mileageEnd: '', fuelUsed: '' });
                     break;
                 case 'add-vehicle':
-                    // Безопасная обработка чисел с плавающей точкой (защита от ошибки 500 DB)
                     const safeFuelNorm = String(vals.fuelNorm || '0').replace(',', '.');
                     const parsedFuelNorm = parseFloat(safeFuelNorm) || 0.0;
 
                     if (parsedFuelNorm >= 1000) {
+                        // АНАЛИТИКА: Ошибка валидации
+                        analytics.trackEvent('Системные события', 'validation_error', { field_id: 'fuelNorm', error_code: 'ERR_LIMIT_EXCEEDED' });
                         alert("Ошибка: Норма ГСМ слишком большая! Максимальное значение 999.99");
                         return;
                     }
@@ -340,6 +347,8 @@ export default function DashboardPage() {
                         status: "СВОБОДЕН"
                     };
                     await api.createVehicle(newVehicleData as any);
+                    // АНАЛИТИКА: ТС успешно добавлено
+                    analytics.trackEvent('Конверсия', 'vehicle_reg_success', { brand_model: newVehicleData.model, file_size_kb: 1024 });
                     break;
                 case 'edit-vehicle':
                     if (modalState.data && 'plateNumber' in modalState.data) {
@@ -357,6 +366,8 @@ export default function DashboardPage() {
                     break;
                 case 'add-repair':
                     await api.createRepair(Number(vals.vehicleId), { ...vals, cost: Number(vals.cost) });
+                    // АНАЛИТИКА: Ремонт сохранен
+                    analytics.trackEvent('Конверсия', 'repair_record_done', { total_cost: Number(vals.cost), currency_unit: 'BYN', mileage_total: 150000 });
                     break;
                 case 'assign-driver':
                     if (vals.driverId === 'none') {
@@ -371,6 +382,7 @@ export default function DashboardPage() {
             setModalState({ type: null });
             fetchBaseData(setSelectedVehicleId);
         } catch (err: any) {
+            analytics.trackEvent('Системные события', 'api_request_fail', { status_code: err.response?.status || 500, endpoint_path: '/api/submit' });
             alert("Ошибка сохранения: " + (err.response?.data?.message || err.message || "Неизвестная ошибка"));
         }
     };
@@ -426,10 +438,25 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <h1 className="text-3xl font-bold">Аналитическая панель</h1>
                     <div className="flex space-x-2 flex-wrap gap-y-2">
-                        <Button variant="outline" onClick={() => { if (selectedVehicleId) handleTripVehicleChange(selectedVehicleId); setModalState({ type: 'add-trip' }); }}><MapIcon className="mr-2 h-4 w-4" /> Создать путевой лист</Button>
-                        <Button variant="outline" onClick={() => setModalState({ type: 'add-repair' })}><Wrench className="mr-2 h-4 w-4" /> Записать ремонт/ТО</Button>
-                        <Button variant="outline" onClick={() => setModalState({ type: 'detailed-report' })}><FileText className="mr-2 h-4 w-4" /> Детализированный отчет</Button>
-                        <Button variant="outline" onClick={handleSummaryExportPDF}><FileDown className="mr-2 h-4 w-4" /> Сводный отчет (PDF)</Button>
+                        <Button variant="outline" onClick={() => {
+                            if (selectedVehicleId) handleTripVehicleChange(selectedVehicleId);
+                            setModalState({ type: 'add-trip' });
+                            analytics.trackEvent('Просмотры экранов', 'waybill_form_view', { is_edit_mode: false });
+                        }}>
+                            <MapIcon className="mr-2 h-4 w-4" /> Создать путевой лист
+                        </Button>
+                        <Button variant="outline" onClick={() => setModalState({ type: 'add-repair' })}>
+                            <Wrench className="mr-2 h-4 w-4" /> Записать ремонт/ТО
+                        </Button>
+                        <Button variant="outline" onClick={() => {
+                            setModalState({ type: 'detailed-report' });
+                            analytics.trackEvent('Просмотры экранов', 'report_page_view', { last_report_type: 'detailed' });
+                        }}>
+                            <FileText className="mr-2 h-4 w-4" /> Детализированный отчет
+                        </Button>
+                        <Button variant="outline" onClick={handleSummaryExportPDF}>
+                            <FileDown className="mr-2 h-4 w-4" /> Сводный отчет (PDF)
+                        </Button>
                     </div>
                 </div>
 
@@ -498,7 +525,12 @@ export default function DashboardPage() {
                     <CardHeader>
                         <div className="flex justify-between items-start">
                             <div><CardTitle className="text-xl">Анализ Транспортного Средства</CardTitle></div>
-                            <Select value={selectedVehicleId ?? 'all'} onValueChange={(val) => setSelectedVehicleId(val === 'all' ? null : val)}>
+                            <Select value={selectedVehicleId ?? 'all'} onValueChange={(val) => {
+                                setSelectedVehicleId(val === 'all' ? null : val);
+                                // АНАЛИТИКА: Фильтрация и поиск
+                                analytics.trackEvent('Взаимодействие', 'filter_apply_click', { field_name: 'vehicleId', filter_value: val });
+                                analytics.trackEvent('Системные события', 'search_results', { query_text: val, found_count: 1 });
+                            }}>
                                 <SelectTrigger className="w-[280px]"><SelectValue placeholder="Выберите автомобиль" /></SelectTrigger>
                                 <SelectContent><SelectItem value="all">🔍 Обзор всего парка</SelectItem>{vehicles.map((v) => <SelectItem key={v.id} value={v.id.toString()}>{v.plateNumber} ({v.model})</SelectItem>)}</SelectContent>
                             </Select>
@@ -581,7 +613,15 @@ export default function DashboardPage() {
                                         <h3 className="font-semibold text-lg">История поездок</h3>
                                         <div className="rounded-md border h-[300px] overflow-y-auto">
                                             <Table>
-                                                <TableHeader><TableRow><TableHead>Дата</TableHead><TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => setTripSortOrder(prev => prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none')}>Пробег <SortIndicator order={tripSortOrder} /></TableHead><TableHead className="text-right">Расход</TableHead></TableRow></TableHeader>
+                                                <TableHeader><TableRow>
+                                                    <TableHead>Дата</TableHead>
+                                                    <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => {
+                                                        setTripSortOrder(prev => prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none');
+                                                        // АНАЛИТИКА: Drilldown графика/таблицы
+                                                        analytics.trackEvent('Взаимодействие', 'chart_drilldown', { chart_id: 'trips_table', metric_name: 'mileage' });
+                                                    }}>Пробег <SortIndicator order={tripSortOrder} /></TableHead>
+                                                    <TableHead className="text-right">Расход</TableHead>
+                                                </TableRow></TableHeader>
                                                 <TableBody>{sortedTrips.map((t) => (<TableRow key={t.id} className="hover:bg-muted/50"><TableCell>{t.date}</TableCell><TableCell className="text-right">{t.mileageEnd - t.mileageStart} км</TableCell><TableCell className="text-right">{t.fuelUsed.toFixed(1)} л</TableCell></TableRow>))}</TableBody>
                                             </Table>
                                         </div>
@@ -596,7 +636,7 @@ export default function DashboardPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Card>
-                        <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Транспортные средства</CardTitle>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-vehicle' })}><PlusCircle className="mr-2 h-4 w-4" /> Добавить</Button>}</CardHeader>
+                        <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Транспортные средства</CardTitle>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => { setModalState({ type: 'add-vehicle' }); analytics.trackEvent('Взаимодействие', 'add_entity_click', { entity_type: 'vehicle' }); }}><PlusCircle className="mr-2 h-4 w-4" /> Добавить</Button>}</CardHeader>
                         <CardContent>
                             <div className="rounded-md border h-[300px] overflow-y-auto">
                                 <Table>
@@ -622,7 +662,7 @@ export default function DashboardPage() {
                     </Card>
 
                     <Card>
-                        <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Водители</CardTitle>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => setModalState({ type: 'add-driver' })}><UserPlus className="mr-2 h-4 w-4" /> Добавить</Button>}</CardHeader>
+                        <CardHeader className="flex flex-row justify-between items-center"><CardTitle>Водители</CardTitle>{(user?.roles?.includes('ROLE_ADMIN') || user?.role === 'ROLE_ADMIN') && <Button onClick={() => { setModalState({ type: 'add-driver' }); analytics.trackEvent('Взаимодействие', 'add_entity_click', { entity_type: 'driver' }); }}><UserPlus className="mr-2 h-4 w-4" /> Добавить</Button>}</CardHeader>
                         <CardContent>
                             <div className="rounded-md border h-[300px] overflow-y-auto">
                                 <Table>
@@ -651,7 +691,6 @@ export default function DashboardPage() {
             </motion.main>
             <div className="fixed bottom-8 left-8 z-50"><ThemeToggle /></div>
 
-            {/* Модалки */}
             <Dialog open={modalState.type === 'add-destination'} onOpenChange={() => { setModalState({ type: null }); setDestLat(''); setDestLon(''); }}>
                 <DialogContent className="sm:max-w-[600px]"><form onSubmit={handleFormSubmit}><DialogHeader><DialogTitle>Добавить пункт назначения</DialogTitle></DialogHeader><div className="grid gap-4 py-4"><div className="flex flex-col gap-2"><Label className="text-left font-semibold text-md ml-1">Название пункта</Label><Input name="name" className="w-full" placeholder='Например: Склад "Восточный"' required /></div><div className="w-full h-[250px] rounded-md overflow-hidden border"><PickerMap destLat={destLat} destLon={destLon} onLocationSelect={(lat, lon) => { setDestLat(Number(lat.toFixed(4))); setDestLon(Number(lon.toFixed(4))); }} /></div><p className="text-xs text-muted-foreground text-center mt-[-10px]">Кликните на карту, чтобы выбрать координаты пункта</p><div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-2"><Label className="text-left">Широта (Lat)</Label><Input name="lat" type="number" step="0.0001" value={destLat} onChange={(e) => setDestLat(Number(e.target.value))} required /></div><div className="flex flex-col gap-2"><Label className="text-left">Долгота (Lon)</Label><Input name="lon" type="number" step="0.0001" value={destLon} onChange={(e) => setDestLon(Number(e.target.value))} required /></div></div></div><DialogFooter><Button type="submit">Сохранить</Button></DialogFooter></form></DialogContent>
             </Dialog>
