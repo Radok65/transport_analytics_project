@@ -2,7 +2,7 @@
 
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import axios from 'axios';
-import { analytics } from '@/lib/analyticsService'; // <-- ИМПОРТ АНАЛИТИКИ
+import { analytics } from '@/lib/analyticsService';
 
 axios.defaults.withCredentials = true;
 
@@ -33,9 +33,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             try {
                 const response = await axios.get('http://localhost:8080/api/auth/me');
                 setUser(response.data);
+                // СОХРАНЯЕМ В КЭШ ДЛЯ АНАЛИТИКИ
+                localStorage.setItem('user', JSON.stringify(response.data));
             } catch {
-                console.log("Пользователь не авторизован");
                 setUser(null);
+                // УДАЛЯЕМ ИЗ КЭША ПРИ ОШИБКЕ
+                localStorage.removeItem('user');
             } finally {
                 setIsLoading(false);
             }
@@ -45,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const login = async (username: string, password: string) => {
-        const startTime = Date.now(); // Старт замера времени авторизации
+        const startTime = Date.now();
         try {
             const params = new URLSearchParams();
             params.append('username', username);
@@ -56,11 +59,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const response = await axios.get('http://localhost:8080/api/auth/me');
             setUser(response.data);
 
+            // СОХРАНЯЕМ В КЭШ ДЛЯ АНАЛИТИКИ ПОСЛЕ ЛОГИНА
+            localStorage.setItem('user', JSON.stringify(response.data));
+
             const duration = Date.now() - startTime;
-            // АНАЛИТИКА: Успешная авторизация
             analytics.trackEvent('Конверсия', 'auth_success', { auth_duration: duration });
         } catch (error: any) {
-            // АНАЛИТИКА: Ошибка API
             analytics.trackEvent('Системные события', 'api_request_fail', {
                 status_code: error.response?.status || 500,
                 endpoint_path: '/api/auth/login'
@@ -84,6 +88,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = async () => {
         await axios.post('http://localhost:8080/api/auth/logout');
         setUser(null);
+        // ОЧИЩАЕМ КЭШ ПРИ ВЫХОДЕ
+        localStorage.removeItem('user');
     };
 
     const loginWithGoogle = () => {
