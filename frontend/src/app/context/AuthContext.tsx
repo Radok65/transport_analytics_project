@@ -6,19 +6,19 @@ import axios from 'axios';
 axios.defaults.withCredentials = true;
 
 interface User {
-  username: string;
-  roles: string[];
-  role?: string; // Добавлено для совместимости с OAuth
-  avatarUrl?: string; // Добавлено для картинки Google
+    username: string;
+    roles: string[];
+    role?: string;
+    avatarUrl?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  loginWithGoogle: () => void; // Добавлена функция входа через Google
+    user: User | null;
+    isLoading: boolean;
+    login: (username: string, password: string) => Promise<void>;
+    register: (username: string, password: string) => Promise<void>;
+    logout: () => Promise<void>;
+    loginWithGoogle: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,7 +30,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         const checkUserStatus = async () => {
             try {
-                // Изменен путь на /api/auth/me (наш новый контроллер с OAuth)
                 const response = await axios.get('http://localhost:8080/api/auth/me');
                 setUser(response.data);
             } catch {
@@ -48,10 +47,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const params = new URLSearchParams();
         params.append('username', username);
         params.append('password', password);
-        
+
         await axios.post('http://localhost:8080/api/auth/login', params);
-        
-        // Изменен путь на /api/auth/me
+
         const response = await axios.get('http://localhost:8080/api/auth/me');
         setUser(response.data);
     };
@@ -59,13 +57,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const register = async (username: string, password: string) => {
         await axios.post('http://localhost:8080/api/auth/register', { username, password });
     };
-    
+
     const logout = async () => {
         await axios.post('http://localhost:8080/api/auth/logout');
         setUser(null);
     };
 
-    // Добавлена функция редиректа на Google OAuth
     const loginWithGoogle = () => {
         window.location.href = 'http://localhost:8080/oauth2/authorization/google';
     };
